@@ -1,0 +1,174 @@
+You have full access to the GitHub repository at https://github.com/K1ngs1/kepler. 
+Your goal is to evolve this project into a **complete Pokémon card trading platform** 
+that merges the current premium, auction‑house visual style with a full peer‑to‑peer 
+trading engine — no mock data, everything real and persistent.
+
+### 1. UNDERSTAND THE CURRENT STATE
+- The `backend/` folder contains a FastAPI server (`main.py`) that returns **hardcoded, 
+  static data** from `data.py`. There is no database, no authentication, no real‑time 
+  logic.
+- The `frontend/` folder is a **broken git submodule** (points to nothing). The actual 
+  frontend code exists as a single, large `index.html` inside the backend’s static 
+  folder (served by FastAPI). It’s a React application loaded via CDN, with all 
+  styling and components inlined. It looks polished and professional (“Kepler – The 
+  King of Pokémon”) but it’s a mockup.
+
+### 2. OVERALL MISSION
+Refactor the project into a **modern web application** with the following stack:
+- **Frontend**: Next.js 14 (App Router) with TypeScript, Tailwind CSS, and shadcn/ui.  
+  Re‑implement the existing Kepler UI faithfully — keep the same branding, dark theme, 
+  hero carousel, card grid, lot detail pages, and navigation structure.
+- **Backend / API / Database / Auth / Real‑time**: **Supabase** (free tier).  
+  - All business logic lives in PostgreSQL (database functions, RLS policies).  
+  - Authentication via Supabase Auth (email + Google OAuth).  
+  - Real‑time updates via Supabase Realtime (websockets).  
+  - File storage for card images (user uploads) via Supabase Storage.  
+  - **No custom server** (no FastAPI, no Express). The Next.js frontend talks directly 
+    to Supabase using `@supabase/supabase-js` and server‑side rendering helpers.
+
+### 3. WHAT THE FINAL PRODUCT MUST DO
+1. **Homepage** – Show the Kepler brand, hero carousel, and “Trending / Hot Trades” 
+   (derived from real activity, not static). Keep the auction‑card aesthetic but 
+   repurpose it to showcase things like “Cards Everyone Wants Right Now” or 
+   “Recently Completed Trades”.
+2. **Card Catalog** – Browse a comprehensive Pokémon card database (set, name, number, 
+   image). Populate it with **at least 200 real cards** by fetching from the free 
+   TCGdex API during a seed script. Serve images via TCGdex’s CDN.
+3. **User Authentication** – Sign up / log in with email or Google. Replace the 
+   non‑functional “Login” button.
+4. **My Collection** – Users add cards from the catalog to their personal collection 
+   with condition and quantity. They can mark individual copies as “For Trade” or 
+   “Wanted”.
+5. **Wishlist & Matching** – A dedicated view that shows another user’s wishlist and 
+   indicates mutual matches (they want your card and you want theirs). The backend 
+   must suggest potential trades.
+6. **Trade Flow** – 
+   - Propose a trade (select your cards to give / their cards to receive).  
+   - Counter‑offer with chats per trade.  
+   - Accept a trade → cards are **atomically locked** (cannot be offered elsewhere) 
+     using a PostgreSQL function.  
+   - Both parties confirm receipt → trade completes.
+7. **Real‑Time Updates** – Trade offers, status changes, and chat messages appear 
+   instantly without manual refresh.
+
+### 4. STEP‑BY‑STEP IMPLEMENTATION PLAN
+
+#### Phase A: Fix the Repo & Scaffold Next.js
+- Remove the broken submodule in `frontend/`. Create a clean Next.js 14 app here 
+  (using `npx create-next-app@latest frontend` with TypeScript, Tailwind, App Router).  
+- Set up the Supabase client libraries (`@supabase/supabase-js`, `@supabase/ssr`) 
+  inside the Next.js project.
+- Copy the visual design from `backend/static/index.html` into new React components 
+  and Tailwind classes. Re‑create the exact layout: sticky nav, hero slider, “Active 
+  Lots” grid, sidebar filters, lot detail page. Use shadcn/ui for interactive elements 
+  (buttons, dialogs, forms, input fields).
+
+#### Phase B: Supabase Project Setup & Database Schema
+- Add a `.env.local` file with placeholders for `NEXT_PUBLIC_SUPABASE_URL` and 
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- Inside the Supabase dashboard SQL editor, run the following (include the complete 
+  SQL in your final code output, in a file `supabase/migrations/001_schema.sql`):
+  
+  **Tables** (all with proper foreign keys and timestamps):
+  - `profiles` (extends `auth.users` with `username`, `avatar_url`, `location`, `reputation_score`)
+  - `cards_catalog` (id, name, set_name, set_code, number, rarity, image_url, tcgdex_id)
+  - `user_cards` (id, user_id, catalog_card_id, condition, quantity, for_trade bool, wanted bool)
+  - `trade_offers` (id, initiator_id, recipient_id, status enum: proposed/countered/accepted/completed/cancelled, created_at, updated_at)
+  - `trade_offer_items` (id, trade_offer_id, user_id, user_card_id, quantity)
+  - `trade_messages` (id, trade_offer_id, sender_id, content, sent_at)
+  
+  **Triggers**:
+  - `update_updated_at_column()` for automatic `updated_at` on relevant tables.
+  
+  **RLS Policies** (all referencing `auth.uid()`):
+  - `user_cards`: users select/insert/update/delete their own rows only.
+  - `trade_offers`: users can only see offers where they are initiator or recipient.
+  - `trade_messages`: users can only see messages for trades they’re involved in.
+  - `cards_catalog`: publicly readable, no one can modify (for now).
+
+  **PostgreSQL Functions** (with `SECURITY DEFINER` to enforce complex rules):
+  - `propose_trade(recipient_id, offered_cards json, requested_cards json)`  
+    → validates ownership and availability; inserts offer & items.
+  - `accept_trade(trade_id uuid)`  
+    → verifies caller is recipient, status = 'proposed', then atomically sets all 
+      involved cards’ `for_trade = false` and updates status to 'accepted'.
+  - `counter_offer(trade_id, new_offered json, new_requested json)`  
+    → updates the existing offer and resets status appropriately.
+  - `complete_trade(trade_id)`  
+    → called when a user confirms receipt; when both confirm, status → 'completed'.
+  - `cancel_trade(trade_id)`  
+    → only from proposed/countered; marks as 'cancelled'.
+  
+  **Seed Script**:
+  - A Node.js script (`scripts/seed-catalog.mjs`) that fetches first 200 cards from 
+    `https://api.tcgdex.net/v2/en/cards` and inserts them into `cards_catalog`.
+
+#### Phase C: Frontend Pages & Components
+
+**1. Auth Pages** (`/auth/login`, `/auth/register`, `/auth/callback`)  
+   - Use Supabase Auth UI or custom forms + `supabase.auth.signUp/signInWithPassword`.  
+   - Google OAuth button.
+
+**2. Catalog (`/catalog`)**  
+   - Server component fetches cards from `cards_catalog` (via Supabase).  
+   - Card grid with search bar and filters (by set, rarity).  
+   - Each card has an “Add to Collection” button → modal to select condition & quantity.
+
+**3. My Collection (`/collection`)**  
+   - Grid of user’s owned cards with toggle switches for “For Trade” / “Wanted”.  
+   - Click to edit condition/quantity.
+
+**4. Trade Discovery (`/discover` or integrated into wishlist)**  
+   - Show users who have cards you want and want cards you have.  
+   - A query like: find `user_cards` where `for_trade = true` and `catalog_card_id` 
+     matches the current user’s `wanted` list, and vice versa.
+
+**5. Trade Propose Form (`/trades/new?with=<user_id>`)**  
+   - Split view: your for‑trade cards + their for‑trade cards.  
+   - Select cards from each side, review offer, submit → calls `propose_trade` RPC.
+
+**6. Trades List (`/trades`)**  
+   - Table/card list of all user’s active trades with status chip, last message snippet.
+
+**7. Trade Detail (`/trades/[id]`)**  
+   - Show offered/requested cards.  
+   - Chat panel: real‑time subscription to `trade_messages` (Supabase Realtime).  
+   - Action buttons (Accept, Counter, Cancel, Confirm Receipt) based on role and 
+     status. Each button calls the corresponding PostgreSQL function via 
+     `supabase.rpc()`.
+
+**8. Real‑Time Subscriptions**  
+   - In the trades list and detail page, subscribe to `trade_offers` and 
+     `trade_messages` changes. Use `useEffect`/custom hooks to update UI instantly.
+
+**9. Homepage Redesign**  
+   - Instead of static `HERO_SLIDES`, fetch dynamic data: 
+     - “Hot Cards” = most frequently added to wishlists.  
+     - “Recently Completed Trades” = last 10 completed offers.  
+   - Keep the exact Kepler aesthetic (dark theme, gold accents, serif font).
+
+#### Phase D: Remove the Old Backend
+- Delete the `backend/` folder entirely (or keep only a `README` explaining migration).  
+- All logic now resides in Supabase and Next.js.
+
+### 5. CRITICAL CONSTRAINTS
+- Everything must operate within Supabase’s **free tier** (500 MB database, 1 GB storage, 
+  2 GB bandwidth). Use efficient queries and caching where possible.
+- **No separate server/process.** Only Next.js (frontend + serverless API routes if 
+  absolutely needed) and Supabase services.
+- All trade operations must be **atomic and race‑condition‑proof** via PostgreSQL 
+  functions; never perform multi‑step updates from the client.
+- Fully typed TypeScript code. Use `zod` for form validation.
+
+### 6. OUTPUT FORMAT
+Provide your entire solution as a **PR‑ready set of changes** to the `kepler` repository. 
+Structure the output clearly with file paths, and include:
+- The new `frontend/` directory (Next.js project) with all code.
+- A `supabase/` folder containing the SQL migration file and seed script instructions.
+- Updated `README.md` with setup steps (environment variables, how to run migrations, 
+  seed data, and start the dev server).
+- A summary of architectural decisions and any trade‑offs.
+
+Start working by examining the existing repository thoroughly, and then implement the 
+described transformation step by step. Preserve the “Kepler” brand at all costs — the 
+premium look must remain, but now powered by real data and a functioning trading engine.
