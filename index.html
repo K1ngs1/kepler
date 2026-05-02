@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kepler — Pokémon Card Marketplace</title>
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #fff; color: #111; -webkit-font-smoothing: antialiased; font-size: 14px; }
+    a { color: inherit; text-decoration: none; cursor: pointer; }
+    button { font-family: inherit; cursor: pointer; }
+    input, select { font-family: inherit; }
+
+    /* ── NAV ── */
+    .nav {
+      height: 56px;
+      background: #fff;
+      border-bottom: 1px solid #e5e5e5;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+    .nav-logo {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #111;
+      letter-spacing: -0.3px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      flex-shrink: 0;
+      padding: 0;
+    }
+    .nav-search-wrap {
+      flex: 1;
+      max-width: 420px;
+      position: relative;
+    }
+    .nav-search-wrap svg {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #999;
+      pointer-events: none;
+    }
+    .nav-search-wrap input {
+      width: 100%;
+      height: 36px;
+      border: 1.5px solid #d5d5d5;
+      border-radius: 999px;
+      padding: 0 16px 0 38px;
+      font-size: 13px;
+      color: #333;
+      background: #fff;
+      outline: none;
+    }
+    .nav-search-wrap input::placeholder { color: #999; }
+    .nav-search-wrap input:focus { border-color: #999; }
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-left: auto;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 6px 10px;
+      font-size: 13.5px;
+      font-weight: 400;
+      color: #222;
+      background: none;
+      border: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .nav-item:hover { color: #000; }
+    .nav-item.active { border-bottom: 2px solid #111; }
+    .nav-item svg { color: #555; }
+    .nav-login {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 10px;
+      font-size: 13.5px;
+      color: #222;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    .nav-login:hover { color: #000; }
+    .nav-sell {
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-left: 4px;
+    }
+    .nav-sell:hover { background: #2a2a2a; }
+
+    /* ── HERO ── */
+    .hero {
+      position: relative;
+      width: 100%;
+      height: 440px;
+      overflow: hidden;
+      background: #2a1f14;
+    }
+    .hero-slide {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity 0.7s ease;
+      pointer-events: none;
+    }
+    .hero-slide.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+    }
+    .hero-grad {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to right, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0) 80%);
+    }
+    .hero-copy {
+      position: absolute;
+      left: 60px;
+      top: 50%;
+      transform: translateY(-50%);
+      max-width: 480px;
+      color: #fff;
+    }
+    .hero-eyebrow {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.7);
+      margin-bottom: 16px;
+    }
+    .hero-title {
+      font-size: 54px;
+      font-weight: 900;
+      line-height: 1.0;
+      color: #fff;
+      letter-spacing: -1px;
+      margin-bottom: 14px;
+      font-family: 'Inter', sans-serif;
+      text-transform: uppercase;
+    }
+    .hero-title-box {
+      display: inline-block;
+      background: #fff;
+      color: #111;
+      font-size: 28px;
+      font-weight: 700;
+      font-family: 'Libre Baskerville', serif;
+      font-style: italic;
+      padding: 5px 14px;
+      margin-bottom: 18px;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .hero-meta {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.75);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 26px;
+    }
+    .hero-meta-divider { color: rgba(255,255,255,0.3); }
+    .hero-btn {
+      display: inline-flex;
+      align-items: center;
+      background: #e5342a;
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      padding: 12px 28px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .hero-btn:hover { background: #c9261d; }
+    .hero-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 32px;
+      height: 60px;
+      background: rgba(0,0,0,0.25);
+      border: none;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 10;
+    }
+    .hero-arrow:hover { background: rgba(0,0,0,0.45); }
+    .hero-arrow.left { left: 0; }
+    .hero-arrow.right { right: 0; }
+    .hero-dots {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      z-index: 10;
+    }
+    .hero-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.35);
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .hero-dot.active { background: rgba(255,255,255,0.9); }
+
+    /* ── SECTION ── */
+    .section {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 24px 24px;
+    }
+    .section-hd {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .section-hd-title { font-size: 16px; font-weight: 700; color: #111; }
+    .section-hd-link {
+      font-size: 13px;
+      color: #555;
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .section-hd-link:hover { color: #111; }
+
+    /* ── AUCTION CARDS (homepage) ── */
+    .auction-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0;
+      border: 1px solid #e0e0e0;
+    }
+    .auction-card {
+      position: relative;
+      height: 200px;
+      overflow: hidden;
+      cursor: pointer;
+      border-right: 1px solid #e0e0e0;
+    }
+    .auction-card:last-child { border-right: none; }
+    .auction-card-bg {
+      position: absolute;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+      transition: transform 0.4s;
+    }
+    .auction-card:hover .auction-card-bg { transform: scale(1.03); }
+    .auction-card-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.1) 55%);
+    }
+    .auction-card-live {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: #3db56c;
+      color: #fff;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 3px;
+      letter-spacing: 0.3px;
+    }
+    .auction-card-info {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      padding: 10px 12px 12px;
+    }
+    .auction-card-title {
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 4px;
+    }
+    .auction-card-sub {
+      color: rgba(255,255,255,0.65);
+      font-size: 11.5px;
+    }
+
+    /* ── LISTING PAGE ── */
+    .listing-wrap {
+      display: flex;
+      min-height: calc(100vh - 56px);
+      background: #fff;
+    }
+    .sidebar {
+      width: 250px;
+      flex-shrink: 0;
+      border-right: 1px solid #e5e5e5;
+      padding: 16px 0;
+      position: sticky;
+      top: 56px;
+      height: calc(100vh - 56px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      transition: width 0.22s ease, padding 0.22s ease;
+    }
+    .sidebar.collapsed {
+      width: 0;
+      padding: 0;
+      border-right: none;
+      overflow: hidden;
+    }
+    .sidebar-collapse-btn {
+      position: sticky;
+      top: 0;
+      width: 24px;
+      height: 48px;
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-left: none;
+      border-radius: 0 4px 4px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #888;
+      flex-shrink: 0;
+      align-self: flex-start;
+      margin-top: 16px;
+      transition: background 0.12s, color 0.12s;
+      z-index: 10;
+    }
+    .sidebar-collapse-btn:hover { background: #f4f4f4; color: #333; }
+    .sidebar-group { padding: 0 0 4px; }
+    .sidebar-group-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #111;
+      padding: 8px 16px 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: none;
+      border: none;
+      width: 100%;
+      text-align: left;
+      cursor: pointer;
+    }
+    .sidebar-group-title:hover { color: #000; }
+    .sidebar-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 4px 16px;
+      font-size: 12.5px;
+      color: #333;
+      cursor: pointer;
+      line-height: 1.4;
+    }
+    .sidebar-item input[type=checkbox] {
+      margin-top: 2px;
+      flex-shrink: 0;
+      accent-color: #111;
+      cursor: pointer;
+      width: 13px;
+      height: 13px;
+    }
+    .sidebar-item:hover { background: #f7f7f7; }
+    .sidebar-item-count { color: #999; }
+    .sidebar-divider { border: none; border-top: 1px solid #e5e5e5; margin: 6px 0; }
+
+    /* main listing */
+    .listing-main {
+      flex: 1;
+      padding: 16px 20px;
+      background: #fff;
+    }
+    .listing-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .listing-title {
+      font-size: 17px;
+      font-weight: 700;
+      flex: 1;
+    }
+    .toolbar-search {
+      position: relative;
+    }
+    .toolbar-search svg {
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #aaa;
+    }
+    .toolbar-search input {
+      border: 1.5px solid #ddd;
+      border-radius: 4px;
+      padding: 6px 10px 6px 28px;
+      font-size: 12.5px;
+      width: 180px;
+      outline: none;
+      color: #333;
+    }
+    .toolbar-search input:focus { border-color: #999; }
+    .view-btns {
+      display: flex;
+      border: 1.5px solid #ddd;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .view-btn {
+      padding: 5px 9px;
+      background: none;
+      border: none;
+      color: #888;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+    }
+    .view-btn.on { background: #111; color: #fff; }
+    .view-btn:hover:not(.on) { background: #f4f4f4; }
+    .toolbar-select {
+      border: 1.5px solid #ddd;
+      border-radius: 4px;
+      padding: 5px 8px;
+      font-size: 12.5px;
+      color: #333;
+      background: #fff;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* lot grid */
+    .lots-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+    .lot-card {
+      border: 1px solid #e5e5e5;
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      background: #fff;
+      position: relative;
+      transition: box-shadow 0.15s;
+      display: flex;
+      flex-direction: column;
+      height: 420px;
+    }
+    .lot-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+    .lot-card-img {
+      height: 195px;
+      flex-shrink: 0;
+      background: #f8f8f8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .lot-card-img img {
+      max-height: 175px;
+      max-width: 90%;
+      object-fit: contain;
+    }
+    .lot-star {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #bbb;
+      padding: 4px;
+      transition: color 0.12s;
+    }
+    .lot-star:hover { color: #888; }
+    .lot-star.active { color: #111; }
+    .lot-body {
+      padding: 10px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+    .lot-num { font-size: 11.5px; color: #999; margin-bottom: 3px; flex-shrink: 0; }
+    .lot-title {
+      font-size: 12.5px;
+      color: #333;
+      line-height: 1.4;
+      margin-bottom: 10px;
+      flex: 1;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+    }
+    .lot-price-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 2px;
+      flex-shrink: 0;
+    }
+    .lot-price { font-size: 18px; font-weight: 700; color: #111; }
+    .lot-bids-txt { font-size: 12px; color: #777; }
+    .lot-time-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      flex-shrink: 0;
+    }
+    .lot-time { font-size: 12px; color: #555; }
+    .lot-bid-hist {
+      font-size: 12px;
+      color: #333;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    .lot-bid-hist:hover { color: #000; }
+    .lot-bid-btn {
+      width: 100%;
+      padding: 8px;
+      border: 1.5px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      color: #111;
+      cursor: pointer;
+      transition: border-color 0.12s, background 0.12s;
+      flex-shrink: 0;
+      margin-top: auto;
+    }
+    .lot-bid-btn:hover { border-color: #888; background: #f7f7f7; }
+
+    /* ── DETAIL PAGE ── */
+    .detail-breadcrumb {
+      padding: 8px 24px;
+      font-size: 12px;
+      color: #777;
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      border-bottom: 1px solid #eee;
+      background: #fff;
+    }
+    .detail-breadcrumb button {
+      background: none;
+      border: none;
+      font-size: 12px;
+      color: #777;
+      cursor: pointer;
+      padding: 0;
+    }
+    .detail-breadcrumb button:hover { color: #333; text-decoration: underline; }
+
+    .detail-lot-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 48px;
+      padding: 12px 24px;
+      border-bottom: 1px solid #eee;
+      background: #fff;
+      font-size: 13px;
+    }
+    .lot-nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: none;
+      border: none;
+      font-size: 13px;
+      color: #333;
+      cursor: pointer;
+      padding: 4px 6px;
+      border-radius: 3px;
+    }
+    .lot-nav-btn:hover { background: #f4f4f4; color: #111; }
+    .lot-nav-center { font-size: 13px; color: #777; }
+
+    .detail-title-bar {
+      background: #f0f2f7;
+      border-bottom: 1px solid #e0e3ee;
+      padding: 20px 24px;
+      text-align: center;
+    }
+    .detail-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #111;
+      max-width: 700px;
+      margin: 0 auto;
+      line-height: 1.35;
+    }
+
+    .detail-body {
+      display: flex;
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 28px 24px 48px;
+      gap: 0;
+    }
+
+    /* left: images */
+    .detail-img-col {
+      width: 400px;
+      flex-shrink: 0;
+    }
+    .detail-main-img-box {
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      height: 340px;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .detail-main-img-box img {
+      max-height: 310px;
+      max-width: 92%;
+      object-fit: contain;
+    }
+    .detail-img-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: #555;
+      cursor: pointer;
+      font-size: 18px;
+      padding: 8px 10px;
+      font-weight: 300;
+    }
+    .detail-img-arrow:hover { color: #111; }
+    .detail-img-arrow.left { left: 6px; }
+    .detail-img-arrow.right { right: 6px; }
+    .detail-thumbs {
+      display: flex;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .detail-thumb {
+      width: 66px;
+      height: 66px;
+      border: 2px solid #e0e0e0;
+      border-radius: 3px;
+      background: #f8f8f8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .detail-thumb.on { border-color: #555; }
+    .detail-thumb img { max-height: 58px; max-width: 100%; object-fit: contain; }
+
+    /* right: bid panel */
+    .detail-bid-col {
+      flex: 1;
+      padding-left: 44px;
+    }
+    .bid-table { width: 100%; border-collapse: collapse; }
+    .bid-table tr { border-bottom: 1px solid #eee; }
+    .bid-table tr:last-child { border-bottom: none; }
+    .bid-table td {
+      padding: 14px 0;
+      vertical-align: top;
+    }
+    .bid-table td:first-child {
+      font-size: 13px;
+      color: #555;
+      font-weight: 500;
+      white-space: nowrap;
+      padding-right: 20px;
+      width: 100px;
+    }
+    .bid-table td:last-child { text-align: right; }
+    .bid-big-price { font-size: 30px; font-weight: 700; color: #111; line-height: 1; }
+    .bid-premium-txt { font-size: 12px; color: #888; margin-top: 3px; }
+    .bid-counts { font-size: 12.5px; color: #666; margin-top: 3px; }
+    .bid-link {
+      font-size: 12.5px;
+      color: #555;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    .bid-link:hover { color: #111; }
+    .bid-ends-time { font-size: 13.5px; font-weight: 600; color: #111; }
+    .bid-ends-sub { font-size: 12px; color: #888; margin-top: 3px; }
+    .bid-ends-interval { font-size: 12px; color: #888; margin-top: 2px; font-style: italic; }
+
+    .btn-place-bid {
+      display: block;
+      width: 100%;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      margin-bottom: 10px;
+      margin-top: 6px;
+      transition: background 0.15s;
+    }
+    .btn-place-bid:hover { background: #333; }
+    .btn-watchlist {
+      display: block;
+      width: 100%;
+      background: #fff;
+      color: #111;
+      border: 1.5px solid #111;
+      border-radius: 4px;
+      padding: 13px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .btn-watchlist:hover { background: #f5f5f5; }
+
+    .detail-section { margin-top: 22px; }
+    .detail-section-title { font-size: 13.5px; font-weight: 700; margin-bottom: 5px; }
+    .detail-section-text { font-size: 13px; color: #555; line-height: 1.55; }
+    .detail-section-link { color: #333; text-decoration: underline; }
+    .btn-outline-ext {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      padding: 11px;
+      border: 1.5px solid #ccc;
+      border-radius: 4px;
+      background: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: border-color 0.12s;
+    }
+    .btn-outline-ext:hover { border-color: #888; }
+    .ship-list { font-size: 12.5px; color: #555; padding-left: 16px; line-height: 1.8; }
+
+    /* ── BID MODAL ── */
+    .modal-bg {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal {
+      background: #fff;
+      border-radius: 8px;
+      padding: 28px;
+      width: 420px;
+      max-width: 95vw;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+    }
+    .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .modal-sub { font-size: 12.5px; color: #777; margin-bottom: 20px; }
+    .modal-label { font-size: 12.5px; font-weight: 600; margin-bottom: 6px; display: block; }
+    .modal-input {
+      width: 100%;
+      border: 1.5px solid #ccc;
+      border-radius: 5px;
+      padding: 10px 14px;
+      font-size: 22px;
+      font-weight: 700;
+      font-family: inherit;
+      outline: none;
+      margin-bottom: 6px;
+    }
+    .modal-input:focus { border-color: #555; }
+    .modal-hint { font-size: 12px; color: #888; margin-bottom: 18px; }
+    .modal-btns { display: flex; gap: 8px; }
+    .modal-cancel {
+      flex: 1;
+      padding: 11px;
+      border: 1.5px solid #ccc;
+      border-radius: 5px;
+      background: #fff;
+      font-size: 13.5px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .modal-cancel:hover { border-color: #888; }
+    .modal-confirm {
+      flex: 2;
+      padding: 11px;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      font-size: 13.5px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .modal-confirm:hover { background: #333; }
+
+    /* ── FOOTER ── */
+    .footer {
+      border-top: 1px solid #e5e5e5;
+      background: #fff;
+      padding: 40px 24px 24px;
+    }
+    .footer-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 40px;
+      padding-bottom: 32px;
+    }
+    .footer-logo {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .footer-tag { font-size: 13px; color: #777; line-height: 1.6; }
+    .footer-col-title { font-size: 11.5px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: #444; margin-bottom: 12px; }
+    .footer-links { display: flex; flex-direction: column; gap: 8px; }
+    .footer-links a { font-size: 13px; color: #666; }
+    .footer-links a:hover { color: #111; }
+    .footer-bottom {
+      max-width: 1200px;
+      margin: 0 auto;
+      border-top: 1px solid #eee;
+      padding-top: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #999;
+    }
+    .footer-bottom-links { display: flex; gap: 18px; }
+    .footer-bottom-links a { color: #999; }
+    .footer-bottom-links a:hover { color: #555; }
+
+    /* PSA slab visual */
+    .slab {
+      display: inline-flex;
+      flex-direction: column;
+      width: 130px;
+      height: 180px;
+      border: 2.5px solid #1c3f8a;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #e8eef7;
+      box-shadow: 0 3px 14px rgba(0,0,0,0.13);
+    }
+    .slab-top {
+      background: #1c3f8a;
+      color: #fff;
+      font-size: 7.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      text-align: center;
+      padding: 3px 4px;
+    }
+    .slab-body {
+      flex: 1;
+      background: #fafaf2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .slab-stripe {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        -45deg,
+        transparent 0px,
+        transparent 8px,
+        rgba(0,0,0,0.025) 8px,
+        rgba(0,0,0,0.025) 16px
+      );
+    }
+    .slab-label {
+      font-family: monospace;
+      font-size: 8.5px;
+      color: #999;
+      text-align: center;
+      padding: 4px 6px;
+      position: relative;
+      z-index: 1;
+    }
+    .slab-grade-badge {
+      position: absolute;
+      bottom: 5px;
+      right: 5px;
+      background: #1c3f8a;
+      color: #fff;
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-size: 10px;
+      font-weight: 800;
+      z-index: 2;
+    }
+    .slab-bottom {
+      background: #1c3f8a;
+      color: #fff;
+      font-size: 7px;
+      text-align: center;
+      padding: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    /* success banner */
+    .bid-success {
+      background: #edf9f1;
+      border: 1px solid #7bc99b;
+      border-radius: 4px;
+      padding: 12px 16px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #1a6b3a;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+/* ───────────────────────────── DATA ───────────────────────────── */
+
+const HERO_SLIDES = [
+{
+  eyebrow: "Spring 2026 Flagship Event",
+  big: "KING of",
+  big2: "POKÉMON",
+  boxed: "The Rarest Cards",
+  meta1: "Season 3",
+  meta2: "Live Now",
+  cta: "Browse Auction",
+  bg: "linear-gradient(135deg,#3a2510 0%,#5a3820 40%,#7a5030 100%)"
+},
+{
+  eyebrow: "Private Sales — By Appointment",
+  big: "VINTAGE",
+  big2: "COLLECTION",
+  boxed: "Base Set 1st Edition",
+  meta1: "1996–2001",
+  meta2: "Make an Offer",
+  cta: "View Private Sales",
+  bg: "linear-gradient(135deg,#0f1a30 0%,#1a2e50 40%,#253a60 100%)"
+},
+{
+  eyebrow: "Japanese Imports — Aquapolis & Neo",
+  big: "HOLO",
+  big2: "TREASURES",
+  boxed: "Crystal & Rainbow Rares",
+  meta1: "PSA 10 Only",
+  meta2: "Pre-Register",
+  cta: "Explore Collection",
+  bg: "linear-gradient(135deg,#1a1a2e 0%,#2a2a50 40%,#1a3040 100%)"
+}];
+
+
+const AUCTIONS_DATA = [
+{ id: 1, title: "2026 Spring Pokémon Elite Auction", sub: "Extended Bidding Starts: May 3, 7PM ET", bg: "linear-gradient(135deg,#1a2e3e,#2a4a5e)", live: true },
+{ id: 2, title: "2026 April Vintage TCG Holo Auction", sub: "Extended Bidding Starts: May 5, 7PM ET", bg: "linear-gradient(135deg,#2e1a2e,#4e2a4e)", live: true },
+{ id: 3, title: "2026 Spring Base Set 1st Edition Event", sub: "Extended Bidding Starts: May 10, 7PM ET", bg: "linear-gradient(135deg,#2e2a1a,#4e4a2a)", live: true }];
+
+
+const SIDEBAR_LIST = [
+{ label: "TCG Weekly Auction Apr 22 – May 3", n: 482 },
+{ label: "2026 Cheetos Memorabilia Auction", n: 11 },
+{ label: "2026 Spring Pokémon Elite Auction", n: 1390 },
+{ label: "2026 Weekly Auction Apr 28 – May 7", n: 908 },
+{ label: "2026 April Elite Auction", n: 1306 },
+{ label: "TCG Weekly Auction Apr 29 – May 10", n: 397 },
+{ label: "2026 Spring TCG and Manga Elite Auction", n: 594 },
+{ label: "2026 Vintage Star Wars Auction", n: 1195 },
+{ label: "2026 USA 250th Anniversary Historical Auction Preview", n: 5 },
+{ label: "2026 Global Football Auction Preview", n: 8 },
+{ label: "2026 Combat Sports Auction Preview", n: 5 },
+{ label: "2026 June Vintage Elite Auction Preview", n: 66 },
+{ label: "2026 Spring Goldin 100 Preview", n: 5 },
+{ label: "Allows Offers", n: 2 }];
+
+
+const LOTS_DATA = [
+{ id: 1000, title: "2002 Pokémon Japanese 1st Edition Mysterious Mountains Holo #089 Crystal Charizard — PSA GEM MT 10", price: 8000, bids: 26, timer: "2D 1H 7M", grade: "10", gradeLabel: "GEM MT", set: "Aquapolis" },
+{ id: 1001, title: "2000 Pokémon Gym Heroes 1st Edition Holo #14 Sabrina's Gengar — PSA GEM MT 10", price: 3000, bids: 46, timer: "2D 1H 7M", grade: "10", gradeLabel: "GEM MT", set: "Gym Heroes" },
+{ id: 1002, title: "2000 Pokémon Gym Challenge 1st Edition Holo #8 Giovanni's Persian — PSA GEM MT 10", price: 5875, bids: 50, timer: "2D 1H 7M", grade: "10", gradeLabel: "GEM MT", set: "Gym Challenge" },
+{ id: 1003, title: "1999 Pokémon Base Set 1st Edition Shadowless Holo Charizard — PSA NM 7", price: 12500, bids: 88, timer: "2D 1H 7M", grade: "7", gradeLabel: "NM", set: "Base Set" },
+{ id: 1004, title: "2003 Pokémon EX Dragon Holo #97 Rayquaza — BGS GEM MINT 9.5", price: 2200, bids: 19, timer: "2D 1H 7M", grade: "9.5", gradeLabel: "GEM MT", set: "EX Dragon" },
+{ id: 1005, title: "1996 Pokémon Japanese Base Set Holo #6 Charizard — PSA NM-MT 8", price: 680, bids: 34, timer: "2D 1H 7M", grade: "8", gradeLabel: "NM-MT", set: "Base Set JP" }];
+
+
+const DETAIL = {
+  id: 1047,
+  title: "1996 Pokémon Japanese Basic Holo #6 Charizard — PSA NM 7",
+  price: 475,
+  premium: 580,
+  bids: 26,
+  endsShort: "2D 1H 7M",
+  endsFull: "Sun, 5/03/26, 7:00 PM",
+  interval: "30 minutes",
+  grade: "7",
+  gradeLabel: "NM",
+  set: "Base Set JP"
+};
+
+/* ───────────────────────────── COMPONENTS ───────────────────────────── */
+
+function Slab({ grade, label, set, scale = 1 }) {
+  return (
+    <div className="slab" style={{ transform: `scale(${scale})`, transformOrigin: "center" }}>
+      <div className="slab-top">PSA · Pokémon TCG</div>
+      <div className="slab-body">
+        <div className="slab-stripe"></div>
+        <div className="slab-label">{label || "Card"}<br />{set || ""}</div>
+        <div className="slab-grade-badge">{grade}</div>
+      </div>
+      <div className="slab-bottom">Authentic · Graded</div>
+    </div>);
+}
+
+function Nav({ page, goTo }) {
+  return (
+    <nav className="nav">
+      <button className="nav-logo" onClick={() => goTo("home")}>Kepler</button>
+      <div className="nav-search-wrap">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="7" cy="7" r="5" /><path d="M11 11l3 3" /></svg>
+        <input placeholder="Search all lots and listings" />
+      </div>
+      <div className="nav-right">
+        <button className={`nav-item${page === "auctions" ? " active" : ""}`} onClick={() => goTo("auctions")}>
+          Auctions
+          <svg width="10" height="10" viewBox="0 0 10 7" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 1.5l4 4 4-4" /></svg>
+        </button>
+        <button className="nav-item" onClick={() => goTo("private")}>
+          Private Sales
+          <svg width="10" height="10" viewBox="0 0 10 7" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 1.5l4 4 4-4" /></svg>
+        </button>
+        <button className="nav-item" onClick={() => goTo("calendar")}>Calendar</button>
+        <button className="nav-item" onClick={() => goTo("results")}>Results</button>
+        <button className="nav-login">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
+          Login
+        </button>
+        <button className="nav-sell">Sell</button>
+      </div>
+    </nav>);
+}
+
+function Hero({ goTo }) {
+  const [idx, setIdx] = React.useState(0);
+  React.useEffect(() => {
+    const t = setInterval(() => setIdx((i) => (i + 1) % HERO_SLIDES.length), 5500);
+    return () => clearInterval(t);
+  }, []);
+  const s = HERO_SLIDES[idx];
+  return (
+    <div className="hero">
+      {HERO_SLIDES.map((sl, i) =>
+      <div key={i} className={`hero-slide${i === idx ? " active" : ""}`}>
+          <div className="hero-bg" style={{ background: sl.bg }}></div>
+          <div className="hero-grad"></div>
+        </div>
+      )}
+      <div className="hero-copy">
+        <div className="hero-eyebrow">{s.eyebrow}</div>
+        <div className="hero-title">{s.big}<br />{s.big2}</div>
+        <div className="hero-title-box">{s.boxed}</div>
+        <div className="hero-meta">
+          {s.meta1}<span className="hero-meta-divider">|</span>{s.meta2}
+        </div>
+        <button className="hero-btn" onClick={() => goTo("auctions")}>{s.cta}</button>
+      </div>
+      <button className="hero-arrow left" onClick={() => setIdx((i) => (i - 1 + HERO_SLIDES.length) % HERO_SLIDES.length)}>
+        <svg width="12" height="20" viewBox="0 0 12 22" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M10 2L2 11l8 9" /></svg>
+      </button>
+      <button className="hero-arrow right" onClick={() => setIdx((i) => (i + 1) % HERO_SLIDES.length)}>
+        <svg width="12" height="20" viewBox="0 0 12 22" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M2 2l8 9-8 9" /></svg>
+      </button>
+      <div className="hero-dots">
+        {HERO_SLIDES.map((_, i) => <button key={i} className={`hero-dot${i === idx ? " active" : ""}`} onClick={() => setIdx(i)} />)}
+      </div>
+    </div>);
+}
+
+function AuctionCard({ a, goTo }) {
+  return (
+    <div className="auction-card" onClick={() => goTo("auctions")}>
+      <div className="auction-card-bg" style={{ background: a.bg }}></div>
+      <div className="auction-card-overlay"></div>
+      {a.live && <div className="auction-card-live">Live</div>}
+      <div className="auction-card-info">
+        <div className="auction-card-title">{a.title}</div>
+        <div className="auction-card-sub">{a.sub}</div>
+      </div>
+    </div>);
+}
+
+function HomePage({ goTo }) {
+  return (
+    <div>
+      <Hero goTo={goTo} />
+      <div className="section">
+        <div className="section-hd">
+          <div className="section-hd-title">Auctions</div>
+          <button className="section-hd-link" onClick={() => goTo("auctions")}>View All Items</button>
+        </div>
+        <div className="auction-row">
+          {AUCTIONS_DATA.map((a) => <AuctionCard key={a.id} a={a} goTo={goTo} />)}
+        </div>
+      </div>
+    </div>);
+}
+
+function LotCard({ lot, goTo }) {
+  const [starred, setStarred] = React.useState(false);
+  return (
+    <div className="lot-card" onClick={() => goTo("detail")}>
+      <div className="lot-card-img">
+        <Slab grade={lot.grade} label={lot.gradeLabel} set={lot.set} scale={0.95} />
+        <button className={`lot-star${starred ? " active" : ""}`} onClick={(e) => {e.stopPropagation();setStarred((v) => !v);}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill={starred ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.8">
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+          </svg>
+        </button>
+      </div>
+      <div className="lot-body">
+        <div className="lot-num">Lot #{lot.id}</div>
+        <div className="lot-title">{lot.title}</div>
+        <div className="lot-price-row">
+          <div className="lot-price">${lot.price.toLocaleString()}</div>
+          <div className="lot-bids-txt">{lot.bids} bids</div>
+        </div>
+        <div className="lot-time-row">
+          <div className="lot-time">{lot.timer}</div>
+          <button className="lot-bid-hist" onClick={(e) => e.stopPropagation()}>Show bid history</button>
+        </div>
+        <button className="lot-bid-btn" onClick={(e) => {e.stopPropagation();goTo("detail");}}>Bid Now</button>
+      </div>
+    </div>);
+}
+
+function AuctionsPage({ goTo }) {
+  const [checked, setChecked] = React.useState(new Set([0, 2]));
+  const [viewMode, setViewMode] = React.useState("grid");
+  const [sortBy, setSortBy] = React.useState("lot-asc");
+  const [perPage, setPerPage] = React.useState("24");
+  const [yearOpen, setYearOpen] = React.useState(true);
+  const [gradeOpen, setGradeOpen] = React.useState(false);
+  const [setOpen, setSetOpen] = React.useState(false);
+  const [sidebarOpen, setSidebarOpen] = React.useState(true);
+
+  const toggle = (i) => setChecked((s) => {const n = new Set(s);n.has(i) ? n.delete(i) : n.add(i);return n;});
+
+  return (
+    <div className="listing-wrap">
+      {/* Sidebar */}
+      <aside className={`sidebar${sidebarOpen ? "" : " collapsed"}`}>
+        <div className="sidebar-group">
+          <button className="sidebar-group-title" style={{ fontWeight: 400, fontSize: '12.5px', color: '#888', letterSpacing: 0 }}>
+            Auction
+            <svg width="10" height="10" viewBox="0 0 10 7" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 1.5l4 4 4-4" /></svg>
+          </button>
+          {SIDEBAR_LIST.map((a, i) =>
+          <label key={i} className="sidebar-item">
+              <input type="checkbox" checked={checked.has(i)} onChange={() => toggle(i)} />
+              <span>{a.label} <span className="sidebar-item-count">({a.n})</span></span>
+            </label>
+          )}
+        </div>
+        <hr className="sidebar-divider" />
+        <div className="sidebar-group">
+          <button className="sidebar-group-title" onClick={() => setYearOpen((v) => !v)}>
+            Year
+            <svg width="10" height="10" viewBox="0 0 10 7" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ transform: yearOpen ? "rotate(180deg)" : "" }}>
+              <path d="M1 1.5l4 4 4-4" />
+            </svg>
+          </button>
+          {yearOpen && ["1996", "1997", "1998", "1999", "2000", "2001", "2002", "2003"].map((y) =>
+          <label key={y} className="sidebar-item"><input type="checkbox" /><span>{y}</span></label>
+          )}
+        </div>
+        <hr className="sidebar-divider" />
+        <div className="sidebar-group">
+          <button className="sidebar-group-title" onClick={() => setGradeOpen((v) => !v)}>
+            Grade
+            <svg width="10" height="10" viewBox="0 0 10 7" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ transform: gradeOpen ? "rotate(180deg)" : "" }}>
+              <path d="M1 1.5l4 4 4-4" />
+            </svg>
+          </button>
+          {gradeOpen && ["PSA 10 – GEM MT", "PSA 9 – MINT", "PSA 8 – NM-MT", "PSA 7 – NM", "BGS 9.5 – GEM MINT", "BGS 10 – Pristine"].map((g) =>
+          <label key={g} className="sidebar-item"><input type="checkbox" /><span style={{ fontSize: 12 }}>{g}</span></label>
+          )}
+        </div>
+        <hr className="sidebar-divider" />
+        <div className="sidebar-group">
+          <button className="sidebar-group-title" onClick={() => setSetOpen((v) => !v)}>
+            Set
+            <svg width="10" height="10" viewBox="0 0 10 7" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ transform: setOpen ? "rotate(180deg)" : "" }}>
+              <path d="M1 1.5l4 4 4-4" />
+            </svg>
+          </button>
+          {setOpen && ["Base Set", "Base Set Japanese", "Jungle", "Fossil", "Team Rocket", "Gym Heroes", "Gym Challenge", "Neo Genesis", "Aquapolis"].map((s) =>
+          <label key={s} className="sidebar-item"><input type="checkbox" /><span style={{ fontSize: 12 }}>{s}</span></label>
+          )}
+        </div>
+      </aside>
+
+      {/* Sidebar collapse toggle */}
+      <button
+        className="sidebar-collapse-btn"
+        onClick={() => setSidebarOpen(v => !v)}
+        title={sidebarOpen ? "Collapse filters" : "Expand filters"}
+      >
+        <svg width="10" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" strokeWidth="2">
+          {sidebarOpen
+            ? <path d="M7 1L2 7l5 6"/>
+            : <path d="M3 1l5 6-5 6"/>
+          }
+        </svg>
+      </button>
+
+      {/* Main */}
+      <main className="listing-main">
+        <div className="listing-toolbar">
+          <div className="listing-title">Search Lots</div>
+          <div className="toolbar-search">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="7" cy="7" r="5" /><path d="M11 11l3 3" /></svg>
+            <input placeholder="Search…" />
+          </div>
+          <div className="view-btns">
+            <button className={`view-btn${viewMode === "list" ? " on" : ""}`} onClick={() => setViewMode("list")}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="12" height="2.2" /><rect x="2" y="7" width="12" height="2.2" /><rect x="2" y="11" width="12" height="2.2" /></svg>
+            </button>
+            <button className={`view-btn${viewMode === "grid" ? " on" : ""}`} onClick={() => setViewMode("grid")}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="5" height="5" /><rect x="9" y="2" width="5" height="5" /><rect x="2" y="9" width="5" height="5" /><rect x="9" y="9" width="5" height="5" /></svg>
+            </button>
+          </div>
+          <select className="toolbar-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <option value="lot-asc">Lowest Lot #</option>
+            <option value="lot-desc">Highest Lot #</option>
+            <option value="price-asc">Price: Low–High</option>
+            <option value="price-desc">Price: High–Low</option>
+            <option value="bids">Most Bids</option>
+            <option value="ends">Ending Soonest</option>
+          </select>
+          <select className="toolbar-select" value={perPage} onChange={(e) => setPerPage(e.target.value)}>
+            <option value="24">24 per page</option>
+            <option value="48">48 per page</option>
+            <option value="96">96 per page</option>
+          </select>
+        </div>
+        <div className="lots-grid">
+          {LOTS_DATA.map((lot) => <LotCard key={lot.id} lot={lot} goTo={goTo} />)}
+        </div>
+      </main>
+    </div>);
+}
+
+function DetailPage({ goTo }) {
+  const lot = DETAIL;
+  const [thumb, setThumb] = React.useState(0);
+  const [modal, setModal] = React.useState(false);
+  const [bidAmt, setBidAmt] = React.useState(String(lot.price + 25));
+  const [bidDone, setBidDone] = React.useState(false);
+  const [cd, setCd] = React.useState({ d: 2, h: 1, m: 7, s: 42 });
+
+  React.useEffect(() => {
+    const t = setInterval(() => setCd((c) => {
+      let { d, h, m, s } = c;
+      s--;if (s < 0) {s = 59;m--;}if (m < 0) {m = 59;h--;}if (h < 0) {h = 23;d--;}if (d < 0) return c;
+      return { d, h, m, s };
+    }), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <div>
+      <div className="detail-breadcrumb">
+        <button onClick={() => goTo("home")}>Home</button>
+        <span>/</span>
+        <button onClick={() => goTo("auctions")}>Non-Sport</button>
+        <span>/</span>
+        <button onClick={() => goTo("auctions")}>Pokémon</button>
+        <span>/</span>
+        <span>{lot.title}</span>
+      </div>
+
+      <div className="detail-lot-nav" style={{ backgroundColor: "rgb(240, 242, 247)" }}>
+        <button className="lot-nav-btn">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 2L5 7l4 5" /></svg>
+          {lot.id - 1}
+        </button>
+        <div className="lot-nav-center">Lot #{lot.id}</div>
+        <button className="lot-nav-btn">
+          {lot.id + 1}
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 2l4 5-4 5" /></svg>
+        </button>
+      </div>
+
+      <div className="detail-title-bar">
+        <div className="detail-title">{lot.title}</div>
+      </div>
+
+      <div className="detail-body">
+        {/* Images */}
+        <div className="detail-img-col">
+          <div className="detail-main-img-box">
+            <Slab grade={lot.grade} label={lot.gradeLabel} set={lot.set} scale={1.5} />
+            <button className="detail-img-arrow left">‹</button>
+            <button className="detail-img-arrow right">›</button>
+          </div>
+          <div className="detail-thumbs">
+            {["Front", "Back", "Label"].map((lbl, i) =>
+            <div key={i} className={`detail-thumb${thumb === i ? " on" : ""}`} onClick={() => setThumb(i)}>
+                <Slab grade={lot.grade} label={lbl} set="" scale={0.42} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Bid panel */}
+        <div className="detail-bid-col">
+          <table className="bid-table">
+            <tbody>
+              <tr>
+                <td>Current Bid:</td>
+                <td>
+                  <div className="bid-big-price">${bidDone ? parseInt(bidAmt).toLocaleString() : lot.price.toLocaleString()}</div>
+                  <div className="bid-premium-txt">${bidDone ? Math.round(parseInt(bidAmt) * 1.22).toLocaleString() : lot.premium} w/ Buyer's Premium</div>
+                  <div className="bid-counts">
+                    {bidDone ? lot.bids + 1 : lot.bids} bids &nbsp;
+                    <button className="bid-link">Show bid history</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>Ends:</td>
+                <td>
+                  <div className="bid-ends-time">{cd.d}D {cd.h}H {cd.m}M &nbsp;|&nbsp; {lot.endsFull}</div>
+                  <div className="bid-ends-interval">Extended Bidding Interval: {lot.interval}</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style={{ marginTop: 8 }}>
+            {bidDone ?
+            <div className="bid-success">✓ Bid of ${parseInt(bidAmt).toLocaleString()} placed successfully!</div> :
+            <button className="btn-place-bid" onClick={() => setModal(true)}>Place Bid</button>
+            }
+            <button className="btn-watchlist">Add to Watch List</button>
+          </div>
+
+          <div className="detail-section">
+            <div className="detail-section-title">Sales History:</div>
+            <div className="detail-section-text">
+              View recent sales history and more about this listing on Kepler trusted partner site <a className="detail-section-link">cardladder.com</a>
+            </div>
+            <button className="btn-outline-ext">
+              View Sales History on Card Ladder
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 3h4v4M13 3L7 9M6 4H3v9h9v-3" /></svg>
+            </button>
+          </div>
+
+          <div className="detail-section">
+            <div className="detail-section-title">Shipping &amp; Handling:</div>
+            <ul className="ship-list">
+              <li>Shipping to a U.S. home address</li>
+              <li>$6 shipping + 0.9% insurance fee for single cards under $1,000</li>
+              <li>$19 shipping + 0.9% insurance fee for orders over $1,000</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {modal &&
+      <div className="modal-bg" onClick={() => setModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">Place Your Bid</div>
+            <div className="modal-sub">Lot #{lot.id} — {lot.title}</div>
+            <label className="modal-label">Your Maximum Bid (USD)</label>
+            <input className="modal-input" type="number" value={bidAmt} onChange={(e) => setBidAmt(e.target.value)} min={lot.price + 25} step={25} />
+            <div className="modal-hint">Current bid: ${lot.price.toLocaleString()} · Minimum next bid: ${(lot.price + 25).toLocaleString()}</div>
+            <div className="modal-btns">
+              <button className="modal-cancel" onClick={() => setModal(false)}>Cancel</button>
+              <button className="modal-confirm" onClick={() => {setBidDone(true);setModal(false);}}>Confirm Bid</button>
+            </div>
+          </div>
+        </div>
+      }
+    </div>);
+}
+
+function Footer({ goTo }) {
+  return (
+    <footer className="footer">
+      <div className="footer-inner">
+        <div>
+          <div className="footer-logo">Kepler</div>
+          <div className="footer-tag">The premier marketplace for graded Pokémon cards and vintage TCG collectibles. Trusted by collectors worldwide.</div>
+        </div>
+        <div>
+          <div className="footer-col-title">Marketplace</div>
+          <div className="footer-links">
+            <a onClick={() => goTo("auctions")}>Auctions</a>
+            <a onClick={() => goTo("private")}>Private Sales</a>
+            <a onClick={() => goTo("calendar")}>Calendar</a>
+            <a onClick={() => goTo("results")}>Results</a>
+          </div>
+        </div>
+        <div>
+          <div className="footer-col-title">Sellers</div>
+          <div className="footer-links">
+            <a>How to Sell</a>
+            <a>Consign a Card</a>
+            <a>Seller FAQ</a>
+            <a>Grading Guide</a>
+          </div>
+        </div>
+        <div>
+          <div className="footer-col-title">Company</div>
+          <div className="footer-links">
+            <a>About Kepler</a>
+            <a>Careers</a>
+            <a>Press</a>
+            <a>Contact</a>
+          </div>
+        </div>
+      </div>
+      <div className="footer-bottom">
+        <span>© 2026 Kepler Trading Co. All rights reserved.</span>
+        <div className="footer-bottom-links">
+          <a>Privacy Policy</a>
+          <a>Terms of Service</a>
+          <a>Buyer's Premium</a>
+        </div>
+      </div>
+    </footer>);
+}
+
+/* ───────────────────────────── APP ───────────────────────────── */
+
+function App() {
+  const [page, setPage] = React.useState("home");
+
+  const goTo = (p) => {setPage(p);window.scrollTo(0, 0);};
+
+  return (
+    <div style={{ fontFamily: "'Inter', sans-serif" }}>
+      <Nav page={page} goTo={goTo} />
+      {page === "home" && <HomePage goTo={goTo} />}
+      {page === "auctions" && <AuctionsPage goTo={goTo} />}
+      {page === "detail" && <DetailPage goTo={goTo} />}
+      {(page === "private" || page === "calendar" || page === "results") &&
+      <div style={{ padding: "80px 24px", textAlign: "center", color: "#888" }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: "#333", marginBottom: 8 }}>{page.charAt(0).toUpperCase() + page.slice(1)}</div>
+          <div style={{ fontSize: 13, marginBottom: 20 }}>This section is coming soon.</div>
+          <button style={{ background: "#111", color: "#fff", border: "none", borderRadius: 5, padding: "9px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer" }} onClick={() => goTo("home")}>← Back Home</button>
+        </div>
+      }
+      <Footer goTo={goTo} />
+    </div>);
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
