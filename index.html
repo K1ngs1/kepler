@@ -804,6 +804,130 @@
     .btn-outline-ext:hover { border-color: #888; }
     .ship-list { font-size: 12.5px; color: #555; padding-left: 16px; line-height: 1.8; }
 
+    /* ── LOGIN MODAL ── */
+    .login-modal {
+      background: #fff;
+      border-radius: 10px;
+      padding: 36px 32px 28px;
+      width: 400px;
+      max-width: 95vw;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.18);
+      position: relative;
+    }
+    .login-close {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      background: none;
+      border: none;
+      font-size: 20px;
+      color: #888;
+      cursor: pointer;
+      line-height: 1;
+      padding: 2px 6px;
+    }
+    .login-close:hover { color: #111; }
+    .login-logo {
+      font-family: 'Libre Baskerville', serif;
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .login-heading { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+    .login-sub { font-size: 13px; color: #777; margin-bottom: 22px; }
+    .login-google-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 11px 16px;
+      border: 1.5px solid #ddd;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: border-color 0.12s, box-shadow 0.12s;
+      margin-bottom: 18px;
+    }
+    .login-google-btn:hover { border-color: #aaa; box-shadow: 0 1px 5px rgba(0,0,0,0.08); }
+    .login-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .login-divider-line { flex: 1; height: 1px; background: #e5e5e5; }
+    .login-divider-txt { font-size: 12px; color: #aaa; white-space: nowrap; }
+    .login-field-label { font-size: 12.5px; font-weight: 600; margin-bottom: 5px; display: block; color: #333; }
+    .login-field-input {
+      width: 100%;
+      border: 1.5px solid #ccc;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      margin-bottom: 14px;
+      transition: border-color 0.12s;
+    }
+    .login-field-input:focus { border-color: #555; }
+    .login-forgot { font-size: 12px; color: #555; text-decoration: underline; cursor: pointer; float: right; margin-top: -10px; margin-bottom: 18px; display: block; }
+    .login-submit-btn {
+      display: block;
+      width: 100%;
+      padding: 13px;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-bottom: 16px;
+    }
+    .login-submit-btn:hover { background: #333; }
+    .login-register-txt { font-size: 12.5px; color: #777; text-align: center; }
+    .login-register-txt a { color: #111; font-weight: 600; text-decoration: underline; cursor: pointer; }
+    .login-success-icon { font-size: 40px; margin-bottom: 12px; }
+    .login-success-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+    .login-success-sub { font-size: 13px; color: #777; }
+
+    /* ── DETAIL ACTION BUTTONS ── */
+    .detail-action-btns { display: flex; gap: 10px; margin-top: 6px; margin-bottom: 10px; }
+    .btn-buy-now {
+      flex: 1;
+      padding: 14px;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 15px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-buy-now:hover { background: #333; }
+    .btn-trade-now {
+      flex: 1;
+      padding: 14px;
+      background: #fff;
+      color: #111;
+      border: 1.5px solid #111;
+      border-radius: 4px;
+      font-size: 15px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-trade-now:hover { background: #111; color: #fff; }
+
     /* ── BID MODAL ── */
     .modal-bg {
       position: fixed;
@@ -1091,7 +1215,7 @@ function Slab({ grade, label, set, scale = 1 }) {
     </div>);
 }
 
-function Nav({ page, goTo }) {
+function Nav({ page, goTo, onLogin, user, onLogout }) {
   return (
     <nav className="nav">
       <button className="nav-logo" onClick={() => goTo("home")}>Kepler</button>
@@ -1108,10 +1232,17 @@ function Nav({ page, goTo }) {
           Private Sales
           <svg width="10" height="10" viewBox="0 0 10 7" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 1.5l4 4 4-4" /></svg>
         </button>
-        <button className="nav-login">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
-          Login
-        </button>
+        {user ? (
+          <button className="nav-login" onClick={onLogout} title="Sign out">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
+            {user.name.split(" ")[0]}
+          </button>
+        ) : (
+          <button className="nav-login" onClick={onLogin}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></svg>
+            Login
+          </button>
+        )}
         <button className="nav-sell">Sell</button>
       </div>
     </nav>);
@@ -1418,7 +1549,10 @@ function DetailPage({ goTo }) {
           <div style={{ marginTop: 8 }}>
             {bidDone ?
             <div className="bid-success">✓ Bid of ${parseInt(bidAmt).toLocaleString()} placed successfully!</div> :
-            <button className="btn-place-bid" onClick={() => setModal(true)}>Place Bid</button>
+            <div className="detail-action-btns">
+              <button className="btn-buy-now" onClick={() => setModal(true)}>Buy Now</button>
+              <button className="btn-trade-now" onClick={() => setModal(true)}>Trade</button>
+            </div>
             }
             <button className="btn-watchlist">Add to Watch List</button>
           </div>
@@ -1510,16 +1644,126 @@ function Footer({ goTo }) {
     </footer>);
 }
 
+/* ───────────────────────────── LOGIN MODAL ───────────────────────────── */
+
+function LoginModal({ onClose, onSuccess }) {
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [done, setDone] = React.useState(false);
+  const [googleDone, setGoogleDone] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  const handleEmailLogin = () => {
+    if (!email || !password) { setError("Please enter your email and password."); return; }
+    if (!email.includes("@")) { setError("Please enter a valid email address."); return; }
+    setError("");
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      setDone(true);
+      setTimeout(() => onSuccess({ name: email.split("@")[0], email }), 1200);
+    }, 900);
+  };
+
+  const handleGoogle = () => {
+    setLoading(true);
+    setError("");
+    setTimeout(() => {
+      setLoading(false);
+      setGoogleDone(true);
+      setTimeout(() => onSuccess({ name: "Google User", email: "user@gmail.com" }), 1200);
+    }, 900);
+  };
+
+  if (done || googleDone) {
+    return (
+      <div className="modal-bg">
+        <div className="login-modal" style={{ textAlign: "center", padding: "48px 32px" }}>
+          <div className="login-success-icon">✓</div>
+          <div className="login-success-title">You're signed in!</div>
+          <div className="login-success-sub">Welcome back to Kepler.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="login-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="login-close" onClick={onClose}>×</button>
+        <div className="login-logo">Kepler</div>
+        <div className="login-heading">Sign in to your account</div>
+        <div className="login-sub">Access bids, watchlist, and purchase history.</div>
+
+        <button className="login-google-btn" onClick={handleGoogle} disabled={loading}>
+          <svg width="18" height="18" viewBox="0 0 48 48">
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.08 17.74 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-3.59-13.46-8.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+          </svg>
+          Continue with Google
+        </button>
+
+        <div className="login-divider">
+          <div className="login-divider-line"></div>
+          <div className="login-divider-txt">or sign in with email</div>
+          <div className="login-divider-line"></div>
+        </div>
+
+        {error && <div style={{ fontSize: 12.5, color: "#c0392b", marginBottom: 12, background: "#fdf0ef", border: "1px solid #f5c6c2", borderRadius: 5, padding: "8px 12px" }}>{error}</div>}
+
+        <label className="login-field-label">Email address</label>
+        <input
+          className="login-field-input"
+          type="email"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleEmailLogin()}
+        />
+
+        <label className="login-field-label">Password</label>
+        <input
+          className="login-field-input"
+          type="password"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleEmailLogin()}
+        />
+        <a className="login-forgot">Forgot password?</a>
+
+        <button className="login-submit-btn" onClick={handleEmailLogin} disabled={loading}>
+          {loading ? "Signing in…" : "Sign In"}
+        </button>
+
+        <div className="login-register-txt">
+          Don't have an account? <a>Create one free</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ───────────────────────────── APP ───────────────────────────── */
 
 function App() {
   const [page, setPage] = React.useState("home");
+  const [loginOpen, setLoginOpen] = React.useState(false);
+  const [user, setUser] = React.useState(null);
 
   const goTo = (p) => {setPage(p);window.scrollTo(0, 0);};
 
+  const handleLoginSuccess = (u) => {
+    setUser(u);
+    setLoginOpen(false);
+  };
+
   return (
     <div style={{ fontFamily: "'Inter', sans-serif" }}>
-      <Nav page={page} goTo={goTo} />
+      <Nav page={page} goTo={goTo} onLogin={() => setLoginOpen(true)} user={user} onLogout={() => setUser(null)} />
       {page === "home" && <HomePage goTo={goTo} />}
       {page === "auctions" && <AuctionsPage goTo={goTo} />}
       {page === "detail" && <DetailPage goTo={goTo} />}
@@ -1531,6 +1775,7 @@ function App() {
         </div>
       }
       <Footer goTo={goTo} />
+      {loginOpen && <LoginModal onClose={() => setLoginOpen(false)} onSuccess={handleLoginSuccess} />}
     </div>);
 }
 
