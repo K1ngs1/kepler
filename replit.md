@@ -1,35 +1,69 @@
 # Kepler — Pokémon Card Marketplace
 
 ## Overview
-A Pokémon card auction/marketplace app. The frontend is a single-page React app served via CDN scripts in `index.html`. The backend is a FastAPI Python service that exposes REST API endpoints for auction data.
+A full-stack Pokémon card trading platform. Next.js 14 frontend with Supabase backend. Features include card catalog, user collections, trade engine, and live auction listings.
 
 ## Architecture
-- **Frontend**: `index.html` — self-contained single-page React app (CDN React 18, Babel standalone, no build step)
-- **Backend**: `backend/` — FastAPI Python app with mock data in `data.py`
-- **Server**: `server.py` — Combined FastAPI app serving both the static `index.html` at `/` and the API at `/api/*`
+- **Frontend**: `frontend/` — Next.js 14 app (TypeScript, Tailwind, App Router)
+- **UI**: Identical to original design — Inter + Libre Baskerville fonts, #111/#fff/#e5e5e5 palette, all CSS classes preserved in `frontend/app/globals.css`
+- **Auth**: Supabase Auth (email/password + Google OAuth via `/auth/callback`)
+- **Database**: Supabase PostgreSQL (schema in `supabase/migrations/001_schema.sql`)
+- **Legacy**: `server.py` / `backend/` kept for reference but no longer the main server
 
 ## Running the App
-The single workflow (`Start application`) runs:
+The `Start application` workflow runs:
 ```
-uvicorn server:app --host 0.0.0.0 --port 5000
+cd frontend && npm run dev -- --hostname 0.0.0.0 --port 5000
 ```
 
-## API Endpoints
-- `GET /api/hero` — Hero slider data
-- `GET /api/auctions` — Auction listings
-- `GET /api/sidebar` — Sidebar auction list
-- `GET /api/lots` — All lots
-- `GET /api/lots/{lot_id}` — Single lot detail
+## Pages
+- `/` — Homepage: Hero carousel, live auctions, featured lots
+- `/auctions` — Listings with sidebar filters, sort, search
+- `/auctions/[id]` — Lot detail with bidding UI and countdown
+- `/catalog` — Card catalog (browse + add to collection)
+- `/collection` — My Collection (trade/wanted toggles)
+- `/trades` — Trade offers (active + history tabs)
+- `/auth/callback` — OAuth redirect handler
 
 ## Key Files
-- `index.html` — Full frontend (React + styles + logic)
-- `server.py` — Combined server entry point
-- `backend/main.py` — Original FastAPI app (standalone, not used directly)
-- `backend/data.py` — Mock data for all API endpoints
+- `frontend/app/globals.css` — **All Kepler CSS** (do not overwrite without preserving classes)
+- `frontend/app/layout.tsx` — Root layout: Inter + Libre Baskerville fonts
+- `frontend/components/` — Nav, Hero, Footer, LotCard, AuctionCard, Slab, LoginModal
+- `frontend/lib/supabase/client.ts` — Browser Supabase client
+- `frontend/lib/supabase/server.ts` — Server Supabase client
+- `frontend/middleware.ts` — Auth session refresh
+- `frontend/.env.local` — **User must fill in** NEXT_PUBLIC_SUPABASE_URL + ANON_KEY
+- `supabase/migrations/001_schema.sql` — Full DB schema (run in Supabase SQL editor)
+- `scripts/seed-catalog.mjs` — Seeds card catalog from TCGdex API
+
+## Database Tables
+- `profiles` — User profiles (auto-created on signup)
+- `catalog_cards` — Pokémon card catalog (seeded from TCGdex)
+- `user_cards` — Each user's collection
+- `trade_offers` — P2P trade proposals
+- `trade_items` — Cards in each trade
+- `lots` — Auction lot listings
+- `bids` — Bid records with real-time support
+
+## Environment Variables Required
+In `frontend/.env.local`:
+```
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
+
+For seed script, also set:
+```
+SUPABASE_SERVICE_KEY=your-service-role-key
+```
 
 ## Dependencies
-- Python: `fastapi`, `uvicorn` (installed via pip)
-- Frontend: React 18, Babel (loaded from CDN, no npm)
+- Next.js 14, React 18, TypeScript, Tailwind CSS
+- @supabase/supabase-js, @supabase/ssr
+- zod
 
 ## Deployment
-Configured for autoscale deployment running `uvicorn server:app --host 0.0.0.0 --port 5000`
+Update `.replit` deployment run command to:
+```
+cd frontend && npm run build && npm start
+```
