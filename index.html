@@ -1101,7 +1101,7 @@ function Nav({ page, goTo }) {
       </div>
       <div className="nav-right">
         <button className={`nav-item${page === "auctions" ? " active" : ""}`} onClick={() => goTo("auctions")}>
-          Auctions
+          Trade
           <svg width="10" height="10" viewBox="0 0 10 7" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 1.5l4 4 4-4" /></svg>
         </button>
         <button className="nav-item" onClick={() => goTo("private")}>
@@ -1168,7 +1168,15 @@ function AuctionCard({ a, goTo }) {
 function HomePage({ goTo }) {
   return (
     <div>
-      <Hero goTo={goTo} />
+      <div className="section">
+        <div className="section-hd">
+          <div className="section-hd-title">Featured Lots</div>
+          <button className="section-hd-link" onClick={() => goTo("auctions")}>View All Items</button>
+        </div>
+        <div className="lots-grid">
+          {LOTS_DATA.map((lot) => <LotCard key={lot.id} lot={lot} goTo={goTo} />)}
+        </div>
+      </div>
     </div>);
 }
 
@@ -1195,7 +1203,10 @@ function LotCard({ lot, goTo }) {
           <div className="lot-time">{lot.timer}</div>
           <button className="lot-bid-hist" onClick={(e) => e.stopPropagation()}>Show bid history</button>
         </div>
-        <button className="lot-bid-btn" onClick={(e) => {e.stopPropagation();goTo("detail");}}>Bid Now</button>
+        <div style={{ display: "flex", gap: "8px", marginTop: "auto" }}>
+          <button className="lot-bid-btn" style={{ flex: 1 }} onClick={(e) => {e.stopPropagation();goTo("detail");}}>Trade</button>
+          <button className="lot-bid-btn" style={{ flex: 1, background: "#111", color: "#fff", borderColor: "#111" }} onClick={(e) => {e.stopPropagation();goTo("detail");}}>Buy Now</button>
+        </div>
       </div>
     </div>);
 }
