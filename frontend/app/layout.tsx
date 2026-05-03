@@ -1,0 +1,37 @@
+import type { Metadata } from 'next';
+import { Inter, Libre_Baskerville } from 'next/font/google';
+import './globals.css';
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  weight: ['300', '400', '500', '600', '700', '900'],
+});
+
+const libreBaskerville = Libre_Baskerville({
+  subsets: ['latin'],
+  variable: '--font-baskerville',
+  weight: ['400', '700'],
+  style: ['normal', 'italic'],
+});
+
+export const metadata: Metadata = {
+  title: 'Kepler — Pokémon Card Marketplace',
+  description: 'The premier marketplace for graded Pokémon cards and vintage TCG collectibles.',
+  manifest: '/manifest.json',
+  openGraph: {
+    title: 'Kepler — Pokémon Card Marketplace',
+    description: 'The premier marketplace for graded Pokémon cards and vintage TCG collectibles.',
+    type: 'website',
+  },
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body className={`${inter.variable} ${libreBaskerville.variable}`}>
+        {children}
+      </body>
+    </html>
+  );
+}

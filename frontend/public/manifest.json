@@ -1,0 +1,16 @@
+{
+  "name": "Kepler — Pokémon Card Trading",
+  "short_name": "Kepler",
+  "description": "The premier marketplace for graded Pokémon cards and vintage TCG collectibles.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#111111",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

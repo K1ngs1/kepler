@@ -1,0 +1,314 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import Nav from '@/components/Nav';
+import Footer from '@/components/Footer';
+import { createClient } from '@/lib/supabase/client';
+import { useParams, useRouter } from 'next/navigation';
+
+interface CardInfo {
+  name: string;
+  set_name: string;
+  number: string;
+  image_url: string | null;
+}
+
+interface TradeItem {
+  id: string;
+  direction: 'offer' | 'request';
+  user_card_id: string;
+  user_cards: {
+    condition: string;
+    catalog_cards: CardInfo;
+  };
+}
+
+interface TradeMessage {
+  id: string;
+  sender_id: string;
+  content: string;
+  sent_at: string;
+  profiles: { username: string | null } | null;
+}
+
+interface Trade {
+  id: string;
+  status: string;
+  initiator_id: string;
+  recipient_id: string;
+  initiator_confirmed: boolean;
+  recipient_confirmed: boolean;
+  created_at: string;
+  updated_at: string;
+  initiator: { username: string | null } | null;
+  recipient: { username: string | null } | null;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  proposed: 'Proposed', countered: 'Countered', accepted: 'Accepted',
+  completed: 'Completed', cancelled: 'Cancelled',
+};
+
+export default function TradeDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const [trade, setTrade] = useState<Trade | null>(null);
+  const [items, setItems] = useState<TradeItem[]>([]);
+  const [messages, setMessages] = useState<TradeMessage[]>([]);
+  const [msgInput, setMsgInput] = useState('');
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  useEffect(() => {
+    const supabase = createClient();
+    if (!supabase || !id) return;
+
+    let tradeSub: ReturnType<typeof supabase.channel> | null = null;
+    let msgSub: ReturnType<typeof supabase.channel> | null = null;
+
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { setLoading(false); return; }
+      setUserId(user.id);
+
+      const loadTrade = async () => {
+        const { data } = await supabase
+          .from('trade_offers')
+          .select('*, initiator:profiles!trade_offers_initiator_id_fkey(username), recipient:profiles!trade_offers_recipient_id_fkey(username)')
+          .eq('id', id)
+          .single();
+        if (data) setTrade(data as Trade);
+      };
+
+      const loadItems = async () => {
+        const { data } = await supabase
+          .from('trade_items')
+          .select('id, direction, user_card_id, user_cards(condition, catalog_cards(name, set_name, number, image_url))')
+          .eq('trade_id', id);
+        if (data) setItems(data as TradeItem[]);
+      };
+
+      const loadMessages = async () => {
+        const { data } = await supabase
+          .from('trade_messages')
+          .select('id, sender_id, content, sent_at, profiles(username)')
+          .eq('trade_id', id)
+          .order('sent_at', { ascending: true });
+        if (data) setMessages(data as TradeMessage[]);
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      };
+
+      await Promise.all([loadTrade(), loadItems(), loadMessages()]);
+      setLoading(false);
+
+      tradeSub = supabase.channel(`trade-${id}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'trade_offers', filter: `id=eq.${id}` }, loadTrade)
+        .subscribe();
+
+      msgSub = supabase.channel(`trade-msgs-${id}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trade_messages', filter: `trade_id=eq.${id}` }, loadMessages)
+        .subscribe();
+    });
+
+    return () => { tradeSub?.unsubscribe(); msgSub?.unsubscribe(); };
+  }, [id]);
+
+  const sendMessage = async () => {
+    if (!msgInput.trim() || !userId) return;
+    const supabase = createClient();
+    if (!supabase) return;
+    const { error } = await supabase.from('trade_messages').insert({ trade_id: id, sender_id: userId, content: msgInput.trim() });
+    if (error) showToast(error.message, false);
+    else setMsgInput('');
+  };
+
+  const RPC_LABELS: Record<string, string> = {
+    accept_trade: 'Trade accepted!',
+    cancel_trade: 'Trade cancelled.',
+    complete_trade: 'Receipt confirmed!',
+    counter_offer: 'Counter offer sent!',
+  };
+
+  const rpc = async (fn: string, args?: Record<string, unknown>) => {
+    setActionLoading(true);
+    const supabase = createClient();
+    if (!supabase) return;
+    const { error } = await supabase.rpc(fn, { p_trade_id: id, ...args });
+    if (error) showToast(error.message, false);
+    else showToast(RPC_LABELS[fn] ?? 'Done!');
+    setActionLoading(false);
+  };
+
+  if (loading) return (
+    <>
+      <Nav />
+      <div style={{ textAlign: 'center', padding: '80px 0', color: '#aaa', fontSize: 13 }}>Loading trade…</div>
+      <Footer />
+    </>
+  );
+
+  if (!trade) return (
+    <>
+      <Nav />
+      <div style={{ textAlign: 'center', padding: '80px 0', color: '#888' }}>Trade not found.</div>
+      <Footer />
+    </>
+  );
+
+  const isInitiator = trade.initiator_id === userId;
+  const isRecipient = trade.recipient_id === userId;
+  const partnerName = isInitiator ? (trade.recipient?.username ?? 'Unknown') : (trade.initiator?.username ?? 'Unknown');
+  const offered = items.filter((i) => i.direction === 'offer');
+  const requested = items.filter((i) => i.direction === 'request');
+
+  const myConfirmed = isInitiator ? trade.initiator_confirmed : trade.recipient_confirmed;
+
+  return (
+    <>
+      <Nav />
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: toast.ok ? '#111' : '#c0392b', color: '#fff', padding: '11px 22px', borderRadius: 6, fontSize: 13.5, fontWeight: 500, zIndex: 1000, boxShadow: '0 4px 24px rgba(0,0,0,0.22)', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+          {toast.msg}
+        </div>
+      )}
+
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px' }}>
+        {/* Header */}
+        <div className="listing-toolbar" style={{ marginBottom: 24 }}>
+          <button onClick={() => router.push('/trades')} style={{ background: 'none', border: 'none', fontSize: 13, color: '#777', cursor: 'pointer', padding: 0 }}>← Trades</button>
+          <div className="listing-title" style={{ flex: 1 }}>Trade with {partnerName}</div>
+          <span className={`trade-status-chip trade-status-${trade.status}`}>{STATUS_LABELS[trade.status]}</span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
+          {/* Left: trade items + actions */}
+          <div>
+            {/* Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
+              {/* Offered */}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#555', marginBottom: 10 }}>
+                  {isInitiator ? 'You Offer' : `${trade.initiator?.username ?? 'They'} Offer`}
+                </div>
+                {offered.length === 0 ? (
+                  <div style={{ color: '#ccc', fontSize: 12 }}>No cards</div>
+                ) : offered.map((item) => (
+                  <div key={item.id} className="collection-card" style={{ marginBottom: 10 }}>
+                    <div className="collection-card-img">
+                      {item.user_cards.catalog_cards.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.user_cards.catalog_cards.image_url} alt={item.user_cards.catalog_cards.name} loading="lazy" style={{ maxHeight: 110, maxWidth: '85%', objectFit: 'contain' }} />
+                      ) : <div style={{ color: '#ccc', fontSize: 11 }}>No image</div>}
+                    </div>
+                    <div className="collection-card-body">
+                      <div className="collection-card-name">{item.user_cards.catalog_cards.name}</div>
+                      <div className="collection-card-set">{item.user_cards.catalog_cards.set_name} · #{item.user_cards.catalog_cards.number}</div>
+                      <div style={{ fontSize: 11, color: '#888' }}>{item.user_cards.condition}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Requested */}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#555', marginBottom: 10 }}>
+                  {isInitiator ? 'You Request' : `${trade.recipient?.username ?? 'They'} Request`}
+                </div>
+                {requested.length === 0 ? (
+                  <div style={{ color: '#ccc', fontSize: 12 }}>No cards</div>
+                ) : requested.map((item) => (
+                  <div key={item.id} className="collection-card" style={{ marginBottom: 10 }}>
+                    <div className="collection-card-img">
+                      {item.user_cards.catalog_cards.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={item.user_cards.catalog_cards.image_url} alt={item.user_cards.catalog_cards.name} loading="lazy" style={{ maxHeight: 110, maxWidth: '85%', objectFit: 'contain' }} />
+                      ) : <div style={{ color: '#ccc', fontSize: 11 }}>No image</div>}
+                    </div>
+                    <div className="collection-card-body">
+                      <div className="collection-card-name">{item.user_cards.catalog_cards.name}</div>
+                      <div className="collection-card-set">{item.user_cards.catalog_cards.set_name} · #{item.user_cards.catalog_cards.number}</div>
+                      <div style={{ fontSize: 11, color: '#888' }}>{item.user_cards.condition}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            {trade.status !== 'completed' && trade.status !== 'cancelled' && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {isRecipient && trade.status === 'proposed' && (
+                  <button className="btn-place-bid" style={{ flex: 1, fontSize: 13 }} disabled={actionLoading} onClick={() => rpc('accept_trade')}>
+                    Accept Trade
+                  </button>
+                )}
+                {(isInitiator || isRecipient) && ['proposed', 'countered'].includes(trade.status) && (
+                  <button className="btn-watchlist" style={{ flex: 1, fontSize: 13 }} disabled={actionLoading} onClick={() => rpc('cancel_trade')}>
+                    Cancel
+                  </button>
+                )}
+                {trade.status === 'accepted' && !myConfirmed && (
+                  <button className="btn-place-bid" style={{ flex: 1, fontSize: 13 }} disabled={actionLoading} onClick={() => rpc('complete_trade')}>
+                    Confirm Receipt
+                  </button>
+                )}
+                {trade.status === 'accepted' && myConfirmed && (
+                  <div style={{ fontSize: 12.5, color: '#555', padding: '8px 0' }}>
+                    Waiting for the other party to confirm receipt…
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Right: chat panel */}
+          <div style={{ border: '1px solid #e5e5e5', borderRadius: 4, display: 'flex', flexDirection: 'column', height: 480 }}>
+            <div style={{ padding: '10px 14px', borderBottom: '1px solid #e5e5e5', fontSize: 13, fontWeight: 600 }}>
+              Messages
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {messages.length === 0 && (
+                <div style={{ color: '#ccc', fontSize: 12, textAlign: 'center', marginTop: 20 }}>No messages yet.</div>
+              )}
+              {messages.map((msg) => {
+                const isMe = msg.sender_id === userId;
+                return (
+                  <div key={msg.id} style={{ alignSelf: isMe ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
+                    <div style={{ fontSize: 10.5, color: '#aaa', marginBottom: 3, textAlign: isMe ? 'right' : 'left' }}>
+                      {msg.profiles?.username ?? 'Unknown'}
+                    </div>
+                    <div style={{ background: isMe ? '#111' : '#f5f5f5', color: isMe ? '#fff' : '#111', padding: '8px 12px', borderRadius: isMe ? '12px 12px 3px 12px' : '12px 12px 12px 3px', fontSize: 13, lineHeight: 1.45 }}>
+                      {msg.content}
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={bottomRef} />
+            </div>
+            {trade.status !== 'completed' && trade.status !== 'cancelled' && (
+              <div style={{ padding: '10px 14px', borderTop: '1px solid #e5e5e5', display: 'flex', gap: 8 }}>
+                <input
+                  className="login-field-input"
+                  style={{ flex: 1, marginBottom: 0, padding: '8px 12px', fontSize: 13 }}
+                  placeholder="Type a message…"
+                  value={msgInput}
+                  onChange={(e) => setMsgInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') sendMessage(); }}
+                />
+                <button className="modal-confirm" style={{ padding: '8px 14px', fontSize: 13 }} onClick={sendMessage}>Send</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <Footer />
+    </>
+  );
+}
