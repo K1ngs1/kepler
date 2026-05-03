@@ -41,7 +41,9 @@ export default function CollectionPage() {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
-    setCollection((data as CollectionCard[]) ?? []);
+    // Filter out any rows where the catalog_cards join returned null
+    const rows = ((data as CollectionCard[]) ?? []).filter((c) => c.catalog_cards != null);
+    setCollection(rows);
     setLoading(false);
   }, []);
 
@@ -62,8 +64,10 @@ export default function CollectionPage() {
   };
 
   const filtered = collection.filter((c) =>
-    !search || c.catalog_cards.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.catalog_cards.set_name.toLowerCase().includes(search.toLowerCase())
+    c.catalog_cards != null &&
+    (!search ||
+      c.catalog_cards.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.catalog_cards.set_name.toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
