@@ -36,7 +36,8 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "5000"]
+run = ["npm", "--prefix", "frontend", "start", "--", "--port", "5000"]
+build = ["npm", "--prefix", "frontend", "run", "build"]
 
 [userenv]
 
