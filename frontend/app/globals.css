@@ -297,20 +297,33 @@ input, select { font-family: inherit; }
 .auth-sub { font-size: 13px; color: #777; margin-bottom: 24px; }
 .auth-error { font-size: 12.5px; color: #c0392b; background: #fdf0ef; border: 1px solid #f5c6c2; border-radius: 5px; padding: 8px 12px; margin-bottom: 14px; }
 
-/* ═══════════════════════════════════════════════════
-   RESPONSIVE — all rules below are mobile-only.
-   Desktop styles above this line are never touched.
-   ═══════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE — ALL RULES BELOW ARE MOBILE-ONLY.
+   Desktop styles above line 299 are NEVER touched.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────
+   768px  —  Tablet & large phones
+   Refined: nav, hero, grids, cards, sidebar, detail, tables,
+            trade detail, modals, footer, typography, spacing.
+   ───────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
 
-  /* ── MOBILE NAV ── */
+  /* ── NAV ──────────────────────────────────────────────────── */
+  /* Hide search bar; logo + hamburger fill the bar */
+  .nav { padding: 0 16px; gap: 10px; }
+  .nav-logo { font-size: 20px; }
+  .nav-search-wrap { display: none; }
+  .nav-sell { display: none; }
+
+  /* Hamburger button — invisible on desktop, shown here */
   .nav-hamburger {
     display: flex !important;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     background: none;
     border: none;
     cursor: pointer;
@@ -319,11 +332,10 @@ input, select { font-family: inherit; }
     margin-left: auto;
     flex-shrink: 0;
   }
-  .nav-hamburger:hover { color: #555; }
+  .nav-hamburger:hover { color: #444; }
 
-  .nav-right {
-    display: none;
-  }
+  /* Dropdown panel */
+  .nav-right { display: none; }
   .nav-right.open {
     display: flex;
     flex-direction: column;
@@ -332,202 +344,300 @@ input, select { font-family: inherit; }
     left: 0;
     right: 0;
     background: #fff;
-    border-bottom: 1px solid #e5e5e5;
-    padding: 12px 20px;
-    gap: 4px;
+    border-bottom: 2px solid #e5e5e5;
+    padding: 8px 0;
+    gap: 0;
     z-index: 199;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.10);
   }
+  /* Each nav item = 48px tap target */
   .nav-right.open .nav-item {
-    padding: 10px 4px;
+    min-height: 48px;
+    padding: 0 20px;
     font-size: 15px;
-    border-bottom: 1px solid #f5f5f5;
+    font-weight: 500;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
   }
   .nav-right.open .nav-item:last-child { border-bottom: none; }
-  .nav-right.open .nav-item.active {
-    border-bottom: 1px solid #f5f5f5;
-    font-weight: 600;
-  }
-  .nav-search-wrap {
-    max-width: none;
-    flex: 1;
-    min-width: 0;
-  }
-  .nav-sell { display: none; }
+  .nav-right.open .nav-item.active { font-weight: 700; color: #111; }
 
-  /* ── HERO ── */
-  .hero { height: 320px; }
-  .hero-copy { left: 24px; right: 24px; max-width: none; }
-  .hero-title { font-size: 32px; letter-spacing: -0.5px; }
-  .hero-title-box { font-size: 20px; padding: 4px 10px; }
-  .hero-eyebrow { font-size: 10px; letter-spacing: 2px; margin-bottom: 10px; }
-  .hero-meta { font-size: 10px; gap: 6px; margin-bottom: 18px; }
-  .hero-btn { padding: 10px 20px; font-size: 12px; }
-  .hero-arrow { width: 24px; height: 44px; }
+  /* ── HERO ─────────────────────────────────────────────────── */
+  /* Capped at 280px; gradient strengthened for readability */
+  .hero { height: 280px; }
+  .hero-grad {
+    background: linear-gradient(to right,
+      rgba(0,0,0,0.82) 0%,
+      rgba(0,0,0,0.50) 55%,
+      rgba(0,0,0,0.10) 100%);
+  }
+  .hero-copy { left: 20px; right: 20px; max-width: none; }
+  .hero-eyebrow { font-size: 10px; letter-spacing: 2px; margin-bottom: 8px; }
+  .hero-title { font-size: 30px; letter-spacing: -0.5px; margin-bottom: 10px; }
+  .hero-title-box { font-size: 18px; padding: 4px 10px; margin-bottom: 12px; }
+  .hero-meta { font-size: 10px; gap: 6px; margin-bottom: 16px; }
+  .hero-btn { padding: 12px 24px; font-size: 14px; }
+  .hero-arrow { width: 28px; height: 48px; }
+  .hero-dots { bottom: 10px; }
 
-  /* ── RESPONSIVE GRIDS ── */
-  .auction-row { grid-template-columns: 1fr; }
-  .auction-card { height: 160px; border-right: none; border-bottom: 1px solid #e0e0e0; }
+  /* ── SECTION SPACING ─────────────────────────────────────── */
+  .section { padding: 16px 16px 14px; }
+  .section-hd { margin-bottom: 12px; }
+  .section-hd-title { font-size: 16px; }
+  .section-hd-link { font-size: 12px; }
+
+  /* ── AUCTION CARDS (homepage) ────────────────────────────── */
+  /* Stack vertically; each card shows image + text clearly */
+  .auction-row {
+    grid-template-columns: 1fr;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .auction-card {
+    height: 160px;
+    border-right: none;
+    border-bottom: 1px solid #e0e0e0;
+  }
   .auction-card:last-child { border-bottom: none; }
+  .auction-card-title { font-size: 13px; }
+  .auction-card-sub { font-size: 11px; }
 
-  .lots-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  .lot-card { height: auto; min-height: 320px; }
-  .lot-card-img { height: 150px; }
+  /* ── LOT / TRADE CARDS GRID ─────────────────────────────── */
+  /* 2-col grid, cards auto-height, images fixed */
+  .lots-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .lot-card {
+    height: auto;
+    min-height: 0;
+    border-radius: 8px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+  }
+  .lot-card-img {
+    height: 140px;
+  }
+  .lot-card-img img {
+    max-height: 128px;
+    object-fit: contain;
+  }
+  .lot-body { padding: 8px 10px 10px; }
+  .lot-num { font-size: 10px; }
+  .lot-title { font-size: 11.5px; -webkit-line-clamp: 3; }
+  .lot-price { font-size: 15px; }
+  .lot-bids-txt, .lot-time { font-size: 11px; }
+  .lot-bid-btn {
+    padding: 10px 8px;
+    font-size: 12.5px;
+    min-height: 40px;
+  }
 
-  .catalog-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  /* ── CATALOG GRID ────────────────────────────────────────── */
+  .catalog-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .catalog-card { border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); }
   .catalog-card-img { height: 130px; }
+  .catalog-card-img img { max-height: 118px; object-fit: contain; }
+  .catalog-card-body { padding: 8px 10px 10px; }
+  .catalog-card-name { font-size: 12.5px; }
+  .catalog-card-set { font-size: 10.5px; }
+  .catalog-card-add {
+    padding: 8px;
+    font-size: 12px;
+    min-height: 36px;
+  }
 
-  .collection-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  /* ── COLLECTION GRID ─────────────────────────────────────── */
+  .collection-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .collection-card { border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.07); }
   .collection-card-img { height: 120px; }
+  .collection-card-img img { max-height: 110px; object-fit: contain; }
+  .collection-card-body { padding: 8px 10px 10px; }
+  .collection-card-name { font-size: 12px; }
+  .collection-card-set { font-size: 10px; }
+  .toggle-row { font-size: 11.5px; }
 
-  /* ── SIDEBAR / LISTING ── */
+  /* ── FOR-TRADE GRID ──────────────────────────────────────── */
+  .for-trade-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  /* ── SIDEBAR / LISTING ───────────────────────────────────── */
   .listing-wrap { flex-direction: column; }
   .sidebar {
     width: 100%;
     height: auto;
-    max-height: 50vh;
+    max-height: 48vh;
     position: relative;
     top: 0;
     border-right: none;
     border-bottom: 1px solid #e5e5e5;
   }
-  .sidebar.collapsed { max-height: 0; overflow: hidden; padding: 0; border-bottom: none; }
+  .sidebar.collapsed {
+    max-height: 0;
+    overflow: hidden;
+    padding: 0;
+    border-bottom: none;
+  }
   .sidebar-collapse-btn { display: none; }
-  .listing-main { padding: 12px; }
-  .listing-toolbar { flex-wrap: wrap; gap: 6px; }
-  .toolbar-search input { width: 140px; }
-  .listing-title { font-size: 15px; width: 100%; margin-bottom: 4px; }
+  .listing-main { padding: 14px 16px; }
 
-  /* ── DETAIL PAGE ── */
-  .detail-body { flex-direction: column; padding: 16px 12px 32px; }
-  .detail-img-col { width: 100%; margin-bottom: 20px; }
-  .detail-main-img-box { height: 250px; }
-  .detail-bid-col { padding-left: 0; }
+  /* Toolbar: wrap, search fills space, hide view-mode toggles */
+  .listing-toolbar { flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .listing-title { font-size: 16px; font-weight: 700; width: 100%; margin-bottom: 2px; }
+  .toolbar-search { flex: 1; min-width: 0; }
+  .toolbar-search input { width: 100%; }
+  .view-btns { display: none; }
+
+  /* ── AUCTION / CATALOG DETAIL PAGE ──────────────────────── */
+  .detail-breadcrumb { padding: 6px 16px; font-size: 11px; }
+  .detail-lot-nav { gap: 16px; padding: 8px 16px; }
   .detail-title-bar { padding: 14px 16px; }
   .detail-title { font-size: 16px; }
-  .detail-breadcrumb { padding: 6px 12px; font-size: 11px; }
-  .detail-lot-nav { gap: 16px; padding: 8px 12px; }
-  .bid-big-price { font-size: 24px; }
-  .btn-place-bid, .btn-watchlist { padding: 12px; font-size: 14px; }
+  .detail-body {
+    flex-direction: column;
+    padding: 16px 16px 40px;
+    gap: 0;
+  }
+  .detail-img-col { width: 100%; margin-bottom: 16px; }
+  .detail-main-img-box {
+    height: 220px;
+    border-radius: 8px;
+  }
+  .detail-main-img-box img { max-height: 200px; object-fit: contain; }
+  .detail-bid-col { padding-left: 0; }
+  .bid-big-price { font-size: 26px; }
+  .btn-place-bid { padding: 14px; font-size: 15px; min-height: 48px; }
+  .btn-watchlist { padding: 13px; font-size: 15px; min-height: 48px; }
   .detail-action-btns { flex-direction: column; gap: 8px; }
+  .btn-buy-now, .btn-trade-now { min-height: 48px; }
 
-  /* ── FOOTER ── */
-  .footer-inner { grid-template-columns: 1fr 1fr; gap: 24px; }
-  .footer-bottom { flex-direction: column; gap: 8px; text-align: center; }
-
-  /* ── TRADES TABLE ── */
-  .trades-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .trades-table { min-width: 600px; }
-  .trades-table th, .trades-table td { padding: 8px 6px; font-size: 11px; }
-
-  /* ── SECTION SPACING ── */
-  .section { padding: 20px 12px 16px; }
-  .section-hd-title { font-size: 14px; }
-  .section-hd-link { font-size: 12px; }
-
-  /* ── FOR-TRADE GRID ── */
-  .for-trade-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-}
-
-@media (max-width: 480px) {
-  .hero { height: 260px; }
-  .hero-title { font-size: 26px; }
-  .hero-title-box { font-size: 16px; }
-
-  .lots-grid,
-  .catalog-grid,
-  .collection-grid { grid-template-columns: 1fr; }
-
-  .footer-inner { grid-template-columns: 1fr; gap: 20px; padding-bottom: 20px; }
-
-  .for-trade-grid { grid-template-columns: 1fr; }
-}
-
-/* ═══ MOBILE IMPROVEMENTS ROUND 2 ═══ */
-
-@media (max-width: 768px) {
-
-  /* ── NAV: hide search, keep logo + hamburger only ── */
-  .nav-search-wrap { display: none; }
-  .nav { padding: 0 14px; gap: 8px; }
-  .nav-logo { font-size: 19px; }
-
-  /* ── MODAL: full-width on mobile ── */
-  .modal { width: 94vw; padding: 20px 16px; }
-  .login-modal { width: 94vw; padding: 28px 18px 20px; }
-  .modal-bg { align-items: flex-end; padding-bottom: 0; }
-
-  /* ── TRADE DETAIL: stack the 2-column grid ── */
+  /* ── TRADE DETAIL PAGE ───────────────────────────────────── */
+  /* Stack the 2-col grid (1fr 340px) into a single column */
   .trade-detail-grid {
     display: flex !important;
     flex-direction: column;
     gap: 20px;
   }
-
-  /* ── TRADE CARDS: side-by-side stays but shrinks ── */
+  /* Side-by-side offered/wanted cards */
   .trade-cards-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
   }
+  /* Chat panel: reduce fixed height on mobile */
+  .trade-chat-panel { height: 320px; }
 
-  /* ── PROPOSE TRADE: card picker grid single col ── */
+  /* ── PROPOSE TRADE — card picker ────────────────────────── */
   .card-picker-grid {
     display: grid !important;
     grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  /* ── TRADES TABLE ────────────────────────────────────────── */
+  .trades-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 8px;
+    border: 1px solid #e5e5e5;
+  }
+  .trades-table { min-width: 540px; }
+  .trades-table th {
+    padding: 10px 10px;
+    font-size: 10.5px;
+    white-space: nowrap;
+  }
+  .trades-table td {
+    padding: 10px 10px;
+    font-size: 12px;
+  }
+
+  /* ── MODALS ──────────────────────────────────────────────── */
+  /* Slide up from bottom on mobile */
+  .modal-bg {
+    align-items: flex-end;
+    padding-bottom: 0;
+  }
+  .modal {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 14px 14px 0 0;
+    padding: 24px 20px 32px;
+  }
+  .login-modal {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 14px 14px 0 0;
+    padding: 28px 20px 32px;
+  }
+  .modal-cancel, .modal-confirm { min-height: 44px; font-size: 14px; }
+
+  /* ── FOOTER ──────────────────────────────────────────────── */
+  .footer { padding: 28px 16px 20px; }
+  .footer-inner {
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    padding-bottom: 24px;
+  }
+  .footer-bottom {
+    flex-direction: column;
     gap: 8px;
+    text-align: center;
   }
-
-  /* ── TRADE DETAIL CHAT: fixed height becomes flexible ── */
-  .trade-chat-panel {
-    height: 340px;
-  }
-
-  /* ── TOOLBAR: hide view-mode buttons on mobile ── */
-  .view-btns { display: none; }
-
-  /* ── TOOLBAR SEARCH: expand to fill ── */
-  .toolbar-search { flex: 1; }
-  .toolbar-search input { width: 100%; }
-
-  /* ── COLLECTION CARD BODY: smaller text ── */
-  .collection-card-name { font-size: 11.5px; }
-  .collection-card-set { font-size: 10px; }
-  .toggle-row { font-size: 11px; }
-
-  /* ── CATALOG CARD BODY ── */
-  .catalog-card-name { font-size: 12px; }
-  .catalog-card-set { font-size: 10.5px; }
-  .catalog-card-add { font-size: 11.5px; padding: 6px; }
-
-  /* ── LOT CARD BODY ── */
-  .lot-title { font-size: 11.5px; }
-  .lot-bid-btn { font-size: 12px; padding: 7px; }
-
-  /* ── FOOTER ── */
-  .footer { padding: 28px 16px 16px; }
+  .footer-tag { font-size: 12.5px; }
 }
 
+/* ─────────────────────────────────────────────────────────────
+   480px  —  Small phones (iPhone SE, Galaxy A-series)
+   Refined: single-col grids, smaller hero, tighter typography.
+   ───────────────────────────────────────────────────────────── */
 @media (max-width: 480px) {
 
-  /* ── TRADE CARDS: stack to single col on very small phones ── */
-  .trade-cards-grid {
-    grid-template-columns: 1fr;
-  }
+  /* ── HERO ── */
+  .hero { height: 240px; }
+  .hero-title { font-size: 24px; }
+  .hero-title-box { font-size: 15px; }
+  .hero-eyebrow { font-size: 10px; }
+  .hero-btn { padding: 12px 22px; font-size: 14px; }
 
-  /* ── CARD PICKER: single col on very small phones ── */
-  .card-picker-grid {
-    grid-template-columns: 1fr;
-  }
+  /* ── SINGLE-COL GRIDS ── */
+  .lots-grid,
+  .catalog-grid,
+  .collection-grid,
+  .for-trade-grid { grid-template-columns: 1fr; gap: 10px; }
 
-  /* ── SECTION PADDING ── */
-  .section { padding: 14px 10px 12px; }
+  /* Card images slightly taller in single-col so they look good */
+  .lot-card-img { height: 180px; }
+  .lot-card-img img { max-height: 165px; }
+  .catalog-card-img { height: 160px; }
+  .catalog-card-img img { max-height: 148px; }
+  .collection-card-img { height: 150px; }
+  .collection-card-img img { max-height: 138px; }
 
-  /* ── COLLECTION / CATALOG: single col already set, smaller imgs ── */
-  .collection-card-img { height: 100px; }
-  .catalog-card-img { height: 110px; }
+  /* Card body text — minimum 10px */
+  .catalog-card-name { font-size: 13px; }
+  .catalog-card-set { font-size: 11px; }
+  .collection-card-name { font-size: 12.5px; }
+  .collection-card-set { font-size: 10.5px; }
+  .lot-title { font-size: 12px; }
+  .lot-num { font-size: 10px; }
 
-  /* ── MODAL: slide up from bottom ── */
-  .modal { border-radius: 10px 10px 0 0; }
-  .login-modal { border-radius: 10px 10px 0 0; }
+  /* ── TRADE CARDS — single col on very small phones ── */
+  .trade-cards-grid { grid-template-columns: 1fr; }
+  .card-picker-grid { grid-template-columns: 1fr; }
+
+  /* ── SECTION ── */
+  .section { padding: 14px 14px 12px; }
+  .section-hd-title { font-size: 15px; }
+
+  /* ── FOOTER ── */
+  .footer-inner { grid-template-columns: 1fr; gap: 20px; padding-bottom: 16px; }
 }
