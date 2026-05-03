@@ -1,0 +1,80 @@
+
+You have full access to the GitHub repository at https://github.com/K1ngs1/kepler.
+
+### YOUR MISSION
+Ensure the entire peer-to-peer trading logic works end-to-end. The database layer (PostgreSQL + Supabase) is already solid—all tables, RLS policies, and trade state-machine functions exist and need to be used exactly as they are. The frontend was supposed to be a Next.js 14 app, but the actual page files for the trading features are missing or still empty.
+
+### IMPORTANT BACKGROUND
+- The database already has all the tables you need: `profiles`, `catalog_cards`, `user_cards`, `trade_offers`, `trade_items`, and `trade_messages`.
+- All trade state changes must go through the PostgreSQL functions defined in `supabase/migrations/002_trade_functions.sql`. These are the ONLY way to create, accept, counter, cancel, or complete a trade:
+  - `propose_trade(p_recipient_id uuid, p_offered_card_ids uuid[], p_requested_card_ids uuid[])` → returns the new trade ID
+  - `accept_trade(p_trade_id uuid)` → recipient accepts, atomically locks all involved cards
+  - `counter_offer(p_trade_id uuid, p_offered_card_ids uuid[], p_requested_card_ids uuid[])` → replaces trade items on either side
+  - `cancel_trade(p_trade_id uuid)` → either party can cancel a proposed/countered trade
+  - `complete_trade(p_trade_id uuid)` → each party confirms receipt; when both confirm, trade becomes `completed`
+- The Supabase client and credentials are already set up in `lib/supabase/`.
+
+### STEPS TO IMPLEMENT
+
+#### Step 1: Verify the database functions are deployed
+Before writing any frontend code, confirm the five trade functions exist in the live Supabase project by running this query in the SQL Editor (or via the Supabase dashboard API):
+```sql
+SELECT proname FROM pg_proc WHERE proname IN (
+  'propose_trade','accept_trade','counter_offer','cancel_trade','complete_trade'
+);
+```
+
+If any are missing, re-run the migration file supabase/migrations/002_trade_functions.sql in the SQL Editor.
+
+Step 2: Create the missing trade pages
+
+The project structure defines these routes, but the actual implementation files may be missing. Build them now:
+
+· app/trades/page.tsx — Trade list page
+  · Fetch all trades where the current user is initiator or recipient.
+  · Subscribe to real-time changes on the trade_offers table so new offers appear instantly.
+  · For each trade, show: the other user's name/avatar, the cards involved (images + names), the current status, and a snippet of the latest message.
+  · Clicking a trade navigates to the trade detail page.
+· app/trades/[id]/page.tsx — Trade detail page
+  · Load the single trade with all trade_items (join user_cards + catalog_cards for images and names) and all trade_messages.
+  · Show the offered and requested cards side by side.
+  · Chat panel: Subscribe to trade_messages for this trade in real time. Sending a message inserts into trade_messages.
+  · **, condition, and the owner's username.
+· Includes a "Propose Trade" button that links to /trades/new?with=<ownerId>.
+· If the user is not logged in, show "Login to Trade" instead.
+
+Step 4: Wire up wishlist matching
+
+The app/wishlist/page.tsx (or its equivalent) should:
+
+· Show the current user's user_cards where wanted = true.
+· Query for other users who have those cards marked for_trade = true.
+· For each match, show the card, the owner, and a "Propose Trade" button.
+
+Step 5: Test the complete trade flow
+
+Before considering the work done, test this exact sequence:
+
+1. User A adds a Charizard to their collection and marks it for_trade = true.
+2. User B adds a Blastoise to their collection and marks it for_trade = true.
+3. User B wants Charizard → proposes a trade offering Blastoise for Charizard.
+4. User A sees the proposal in the trade list (realtime).
+5. User A opens the trade, sends a chat message, then clicks "Accept".
+6. Both users see the status change to accepted (realtime).
+7. Both users click "Confirm Receipt".
+8. When both have confirmed, the status changes to completed.
+
+Verify that after step 6 the Charizard and Blastoise are no longer listed as for_trade = true in either user's collection.
+
+Step 6: Error handling and edge cases
+
+· Add proper error boundaries or toast notifications for all RPC calls.
+· If accept_trade throws an error (e.g., a card was already traded), display the error clearly.
+· Do not allow users to propose a trade to themselves.
+
+CRITICAL CONSTRAINTS
+
+· DO NOT CHANGE THE UI. All colors, fonts, spacing, card styles, navigation, and layout must remain identical to the current design. Only wire up the data and interactivity.
+· Use the exact table and column names from the migration files (see above).
+· Never update trade statuses directly from the frontend—always use the PostgreSQL functions via supabase.rpc().
+· All functions are SECURITY DEFINER and call auth.uid() internally. Do not pass the user's ID as a parameter—the functions derive it from the session.
