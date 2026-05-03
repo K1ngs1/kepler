@@ -15,6 +15,7 @@ export default function Nav({ user: initialUser }: NavProps) {
   const [loginOpen, setLoginOpen] = useState(false);
   const [user, setUser] = useState(initialUser ?? null);
   const [unreadTrades, setUnreadTrades] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -75,7 +76,8 @@ export default function Nav({ user: initialUser }: NavProps) {
           </svg>
           <input placeholder="Search all lots and listings" />
         </div>
-        <div className="nav-right">
+        <button className="nav-hamburger" style={{ display: 'none' }} onClick={() => setMenuOpen(!menuOpen)}>☰</button>
+        <div className={menuOpen ? 'nav-right open' : 'nav-right'}>
           <Link href="/auctions" className={`nav-item${pathname === '/auctions' ? ' active' : ''}`}>
             Trade
             <svg width="10" height="10" viewBox="0 0 10 7" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 1.5l4 4 4-4" /></svg>

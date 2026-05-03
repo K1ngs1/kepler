@@ -105,34 +105,36 @@ export default function TradesPage() {
             )}
           </div>
         ) : (
-          <table className="trades-table">
-            <thead>
-              <tr>
-                <th>Partner</th>
-                <th>Your Role</th>
-                <th>Status</th>
-                <th>Last Updated</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayed.map((trade) => (
-                <tr key={trade.id} style={{ cursor: 'pointer' }} onClick={() => window.location.href = `/trades/${trade.id}`}>
-                  <td style={{ fontWeight: 600 }}>{partnerName(trade)}</td>
-                  <td style={{ color: '#777' }}>{role(trade)}</td>
-                  <td>
-                    <span className={`trade-status-chip trade-status-${trade.status}`}>
-                      {STATUS_LABELS[trade.status]}
-                    </span>
-                  </td>
-                  <td style={{ color: '#999' }}>{fmtDate(trade.updated_at)}</td>
-                  <td>
-                    <a href={`/trades/${trade.id}`} style={{ fontSize: 12.5, color: '#555', textDecoration: 'underline', textUnderlineOffset: 2 }}>View →</a>
-                  </td>
+          <div className="trades-table-wrap">
+            <table className="trades-table">
+              <thead>
+                <tr>
+                  <th>Partner</th>
+                  <th>Your Role</th>
+                  <th>Status</th>
+                  <th>Last Updated</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {displayed.map((trade) => (
+                  <tr key={trade.id} style={{ cursor: 'pointer' }} onClick={() => window.location.href = `/trades/${trade.id}`}>
+                    <td style={{ fontWeight: 600 }}>{partnerName(trade)}</td>
+                    <td style={{ color: '#777' }}>{role(trade)}</td>
+                    <td>
+                      <span className={`trade-status-chip trade-status-${trade.status}`}>
+                        {STATUS_LABELS[trade.status]}
+                      </span>
+                    </td>
+                    <td style={{ color: '#999' }}>{fmtDate(trade.updated_at)}</td>
+                    <td>
+                      <a href={`/trades/${trade.id}`} style={{ fontSize: 12.5, color: '#555', textDecoration: 'underline', textUnderlineOffset: 2 }}>View →</a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
       <Footer />

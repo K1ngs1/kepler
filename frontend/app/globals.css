@@ -296,3 +296,149 @@ input, select { font-family: inherit; }
 .auth-heading { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
 .auth-sub { font-size: 13px; color: #777; margin-bottom: 24px; }
 .auth-error { font-size: 12.5px; color: #c0392b; background: #fdf0ef; border: 1px solid #f5c6c2; border-radius: 5px; padding: 8px 12px; margin-bottom: 14px; }
+
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE — all rules below are mobile-only.
+   Desktop styles above this line are never touched.
+   ═══════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+
+  /* ── MOBILE NAV ── */
+  .nav-hamburger {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #111;
+    font-size: 22px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .nav-hamburger:hover { color: #555; }
+
+  .nav-right {
+    display: none;
+  }
+  .nav-right.open {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: 56px;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+    padding: 12px 20px;
+    gap: 4px;
+    z-index: 199;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  }
+  .nav-right.open .nav-item {
+    padding: 10px 4px;
+    font-size: 15px;
+    border-bottom: 1px solid #f5f5f5;
+  }
+  .nav-right.open .nav-item:last-child { border-bottom: none; }
+  .nav-right.open .nav-item.active {
+    border-bottom: 1px solid #f5f5f5;
+    font-weight: 600;
+  }
+  .nav-search-wrap {
+    max-width: none;
+    flex: 1;
+    min-width: 0;
+  }
+  .nav-sell { display: none; }
+
+  /* ── HERO ── */
+  .hero { height: 320px; }
+  .hero-copy { left: 24px; right: 24px; max-width: none; }
+  .hero-title { font-size: 32px; letter-spacing: -0.5px; }
+  .hero-title-box { font-size: 20px; padding: 4px 10px; }
+  .hero-eyebrow { font-size: 10px; letter-spacing: 2px; margin-bottom: 10px; }
+  .hero-meta { font-size: 10px; gap: 6px; margin-bottom: 18px; }
+  .hero-btn { padding: 10px 20px; font-size: 12px; }
+  .hero-arrow { width: 24px; height: 44px; }
+
+  /* ── RESPONSIVE GRIDS ── */
+  .auction-row { grid-template-columns: 1fr; }
+  .auction-card { height: 160px; border-right: none; border-bottom: 1px solid #e0e0e0; }
+  .auction-card:last-child { border-bottom: none; }
+
+  .lots-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .lot-card { height: auto; min-height: 320px; }
+  .lot-card-img { height: 150px; }
+
+  .catalog-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .catalog-card-img { height: 130px; }
+
+  .collection-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .collection-card-img { height: 120px; }
+
+  /* ── SIDEBAR / LISTING ── */
+  .listing-wrap { flex-direction: column; }
+  .sidebar {
+    width: 100%;
+    height: auto;
+    max-height: 50vh;
+    position: relative;
+    top: 0;
+    border-right: none;
+    border-bottom: 1px solid #e5e5e5;
+  }
+  .sidebar.collapsed { max-height: 0; overflow: hidden; padding: 0; border-bottom: none; }
+  .sidebar-collapse-btn { display: none; }
+  .listing-main { padding: 12px; }
+  .listing-toolbar { flex-wrap: wrap; gap: 6px; }
+  .toolbar-search input { width: 140px; }
+  .listing-title { font-size: 15px; width: 100%; margin-bottom: 4px; }
+
+  /* ── DETAIL PAGE ── */
+  .detail-body { flex-direction: column; padding: 16px 12px 32px; }
+  .detail-img-col { width: 100%; margin-bottom: 20px; }
+  .detail-main-img-box { height: 250px; }
+  .detail-bid-col { padding-left: 0; }
+  .detail-title-bar { padding: 14px 16px; }
+  .detail-title { font-size: 16px; }
+  .detail-breadcrumb { padding: 6px 12px; font-size: 11px; }
+  .detail-lot-nav { gap: 16px; padding: 8px 12px; }
+  .bid-big-price { font-size: 24px; }
+  .btn-place-bid, .btn-watchlist { padding: 12px; font-size: 14px; }
+  .detail-action-btns { flex-direction: column; gap: 8px; }
+
+  /* ── FOOTER ── */
+  .footer-inner { grid-template-columns: 1fr 1fr; gap: 24px; }
+  .footer-bottom { flex-direction: column; gap: 8px; text-align: center; }
+
+  /* ── TRADES TABLE ── */
+  .trades-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .trades-table { min-width: 600px; }
+  .trades-table th, .trades-table td { padding: 8px 6px; font-size: 11px; }
+
+  /* ── SECTION SPACING ── */
+  .section { padding: 20px 12px 16px; }
+  .section-hd-title { font-size: 14px; }
+  .section-hd-link { font-size: 12px; }
+
+  /* ── FOR-TRADE GRID ── */
+  .for-trade-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+}
+
+@media (max-width: 480px) {
+  .hero { height: 260px; }
+  .hero-title { font-size: 26px; }
+  .hero-title-box { font-size: 16px; }
+
+  .lots-grid,
+  .catalog-grid,
+  .collection-grid { grid-template-columns: 1fr; }
+
+  .footer-inner { grid-template-columns: 1fr; gap: 20px; padding-bottom: 20px; }
+
+  .for-trade-grid { grid-template-columns: 1fr; }
+}
