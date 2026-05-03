@@ -1,0 +1,185 @@
+You have full access to the GitHub repository at https://github.com/K1ngs1/kepler.
+Carefully read the entire codebase before making any changes.
+
+## Current State of the Repository
+
+### Existing Files
+- **`index.html`** (60KB at root) — The complete Kepler frontend. A single‑file React app loaded via CDN, with all styling inline. This is the actual UI. It must remain pixel‑identical.
+- **`layrr_output.html`** — A scraped/styled version of the Kepler landing page.
+- **`main.py`** (root) — A tiny placeholder script.
+- **`.replit`** — Replit configuration. The `[workflows.workflow.tasks]` section runs:  
+  `cd frontend && npm run dev -- --hostname 0.0.0.0 --port 5000`.  
+  Supabase URL and ANON KEY are exposed in `[userenv.shared]`.
+- **`backend/`** — FastAPI server (`main.py` + `data.py`) that returns **hardcoded mock data** (HERO_SLIDES, AUCTIONS_DATA, LOTS_DATA, etc.). Not used in production but left intact.
+- **`frontend/`** — A **broken git submodule** (0 bytes, type = "submodule", `submodule_git_url` = null). It contains no actual source code and must be repaired.
+- **`scripts/seed-catalog.mjs`** — A working Node.js script that seeds `catalog_cards` from the free TCGdex API (15 classic sets, ~500 cards). Requires `SUPABASE_SERVICE_KEY` environment variable.
+- **`supabase/migrations/001_schema.sql`** — Creates tables: `profiles`, `catalog_cards`, `user_cards`, `trade_offers`, `trade_items`, `lots`, `bids`. Includes RLS policies and the `handle_new_user()` trigger.
+- **`supabase/migrations/002_trade_functions.sql`** — Creates `trade_messages` table, adds `initiator_confirmed` / `recipient_confirmed` columns to `trade_offers`, and five PostgreSQL functions: `propose_trade`, `accept_trade`, `counter_offer`, `cancel_trade`, `complete_trade`.
+- **`attached_assets/`** — Contains pasted prompt texts and a screenshot; ignore these.
+
+### Supabase Connection
+- URL: `https://yquwasetajootlgmyxan.supabase.co`
+- Anon key is available in `.replit` → `[userenv.shared]`.
+- Service role key is **not** in the repository and must be configured separately.
+
+## Your Mission
+Transform the Kepler application from a prototype into a **production‑ready trading platform** while preserving every pixel of the existing UI. The visual design, colours, fonts, layout, and component styles must be identical to the current `index.html`.
+
+## Step 1 — Fix the Broken Frontend
+
+### 1a. Create a proper Next.js 14 app
+The `frontend/` submodule is broken (0 bytes). Delete the submodule reference and create a real Next.js app in its place:
+- Run `npx create-next-app@latest frontend --typescript --tailwind --eslint --app --src-dir=false --import-alias="@/*"` in the repository root
+- Install: `@supabase/supabase-js`, `@supabase/ssr`, `zod`, `react-hot-toast` (or similar toast library)
+- Create a `lib/supabase/client.ts` for client components and `lib/supabase/server.ts` for server components
+
+### 1b. Migrate the exact UI from index.html into Next.js components
+Read `index.html` completely. Extract every colour, font, spacing, shadow, and layout value. Re‑implement the **identical** UI in Next.js using:
+
+- `app/layout.tsx` — dark navigation bar (sticky, identical to current)
+- `app/page.tsx` — homepage with hero carousel, auction cards, lot grid with sidebar
+- `app/catalog/page.tsx` — card catalog grid
+- `app/catalog/[id]/page.tsx` — card detail page
+- `app/collection/page.tsx` — user's collection (grid of owned cards with for_trade/wanted toggles)
+- `app/trades/page.tsx` — trade list
+- `app/trades/[id]/page.tsx` — trade detail with chat and action buttons
+- `app/trades/new/page.tsx` — trade proposal form
+- `app/wishlist/page.tsx` — wishlist with match suggestions
+
+All pages must fetch data from the real Supabase database using the queries described in the data‑connection section below.
+
+**Critical**: After building each component, compare it against the original `index.html`. If any visual detail differs, fix it. The original design is the single source of truth.
+
+## Step 2 — Production Security
+
+### 2a. Protect secrets
+- Create a `.gitignore` file. At minimum it must ignore: `.env`, `.env.local`, `*.env`, `node_modules/`, `.next/`, `backend/venv/`, `backend/__pycache__/`, `*.pyc`
+- **Rotate the Supabase anon key** immediately — the current key is exposed in `.replit` which is committed to version control. Generate a new anon key from the Supabase dashboard
+- Move secrets to `.env.local` (which is gitignored) and reference them via `process.env`
+
+### 2b. Environment configuration
+Create `frontend/.env.local.example` with placeholder values:
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_KEY=your-service-role-key
+
+### 2c. Content Security Policy
+Add a CSP meta tag to the root layout or configure `next.config.ts` to set security headers:
+- `Content-Security-Policy`
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Strict-Transport-Security`
+
+## Step 3 — Real Data Connections (NO Mock Data)
+
+Every page must query the Supabase database. Remove **all** hardcoded arrays, objects, or placeholder text. Use the exact table and column names from the migration files.
+
+### Key queries to implement:
+- **Collection**: `supabase.from('user_cards').select('*, catalog_cards(*)').eq('user_id', userId)`
+- **For Trade**: add `.eq('for_trade', true)` to the collection query
+- **Catalog**: `supabase.from('catalog_cards').select('*')` with pagination (`.range()`)
+- **Trade list**: fetch `trade_offers` where `initiator_id = userId OR recipient_id = userId`, join with `trade_items` and `trade_messages`
+- **Trade detail**: fetch a single trade with all items, messages, and participant profiles
+- **Real‑time**: subscribe to `trade_offers` and `trade_messages` changes using Supabase Realtime
+- **Wishlist matching**: find users who have cards you want and want cards you have
+
+All trade state changes (accept, counter, cancel, confirm) must call the PostgreSQL functions via `supabase.rpc()` — never update trade status directly.
+
+## Step 4 — Authentication
+
+### 4a. Implement Supabase Auth
+- The login/signup modal in the current UI must become fully functional
+- Support email/password and Google OAuth (configure in Supabase dashboard)
+- Create `app/auth/callback/route.ts` for OAuth callback handling
+- Add middleware (`middleware.ts`) that redirects unauthenticated users to the homepage with the login modal open
+
+### 4b. Auth state in the UI
+- The navigation bar must show the user's avatar/name when logged in and a "Login" button when logged out
+- Protected pages (`/collection`, `/trades`, `/wishlist`) must redirect to homepage if unauthenticated
+
+## Step 5 — Robustness & User Experience
+
+### 5a. Error handling
+- Wrap all Supabase queries in try/catch blocks
+- Display user‑friendly error messages via toast notifications when operations fail
+- Show a fallback UI when the database is unreachable (not just a blank page)
+
+### 5b. Loading states
+- Add skeleton loaders or subtle loading spinners for every page that fetches data
+- Buttons that trigger database operations must show a loading/disabled state to prevent double‑clicks
+
+### 5c. Empty states
+- When a user has no cards in their collection, show a friendly message with a CTA to browse the catalog
+- When there are no trades, show "No active trades — browse the catalog to start trading!"
+- When wishlist is empty, show a prompt to add cards they want
+
+### 5d. Edge cases
+- Handle the case where a card is no longer available when a user tries to accept a trade (the `accept_trade` function already raises an exception — display it gracefully)
+- Handle network failures with retry logic
+- Validate all form inputs with `zod` before sending to the database
+
+## Step 6 — Database & Backup
+
+### 6a. Database backup
+- Document how to enable Point‑In‑Time Recovery (PITR) in the Supabase dashboard
+- Add a `supabase/backup-guide.md` with step‑by‑step instructions
+
+### 6b. Seed script hardening
+- The existing `scripts/seed-catalog.mjs` should check for duplicate cards before inserting
+- Add error handling for API timeouts (the script already has basic timeout handling — improve it)
+- Document the required `SUPABASE_SERVICE_KEY` environment variable
+
+## Step 7 — Monitoring & Observability
+
+### 7a. Logging
+- Create a simple logging utility (`lib/logger.ts`) that prints structured logs
+- Log all trade state transitions, authentication events, and errors
+
+### 7b. Error tracking
+- Add a `lib/error-handler.ts` that captures errors and logs them with context
+- In production, consider integrating with Sentry (free tier) — document how
+
+## Step 8 — Polish
+
+### 8a. SEO & Metadata
+- Add proper `<title>` and `<meta>` tags to the root layout
+- Create a `sitemap.ts` and `robots.ts` for search engines
+- Add OpenGraph tags for social sharing
+
+### 8b. PWA Support (Optional but recommended)
+- Create `manifest.json` with the Kepler branding
+- Add a service worker (Next.js has built‑in support) for offline caching of the card catalog
+
+### 8c. README update
+- Update `README.md` with:
+  - Project description (Pokémon card trading platform)
+  - Tech stack (Next.js 14 + Supabase + Tailwind)
+  - Setup instructions (clone, install, configure env vars, run seed, start dev server)
+  - Database schema overview
+  - Contributing guidelines
+
+## CRITICAL CONSTRAINTS
+1. **Do not change the UI.** Every colour, font, spacing, shadow, border, and layout must match the original `index.html` exactly. If in doubt, keep the original.
+2. All data must come from the Supabase database — remove every trace of mock data.
+3. All trade state changes must use PostgreSQL functions via `supabase.rpc()` — never update trade status directly.
+4. Keep Supabase free tier limits in mind. Use pagination for list queries and avoid fetching thousands of rows at once.
+5. Do not delete the old `backend/` folder or its contents.
+6. Fully typed TypeScript throughout.
+
+## DELIVERABLES
+1. Fixed `frontend/` directory with complete Next.js 14 app
+2. `.gitignore` file
+3. `frontend/.env.local.example`
+4. `middleware.ts` (auth guard)
+5. `lib/supabase/client.ts` and `lib/supabase/server.ts`
+6. `lib/logger.ts`, `lib/error-handler.ts`
+7. `supabase/backup-guide.md`
+8. Updated `README.md`
+9. `manifest.json` (PWA)
+10. Any additional pages or components required
+
+Start by reading `index.html` thoroughly to absorb the exact design language, then fix the `frontend/` directory and build outward. Test that the app runs with `cd frontend && npm run dev` and that all pages show real data from the database.
+
+Remember: the UI must remain exactly as it is in the current Kepler design.
+
+
