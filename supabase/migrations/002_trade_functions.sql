@@ -214,6 +214,11 @@ as $$
 declare
   v_trade trade_offers%rowtype;
   v_both_confirmed boolean;
+  v_card_id uuid;
+  v_catalog_card_id uuid;
+  v_condition text;
+  v_quantity integer;
+  v_existing_id uuid;
 begin
   select * into v_trade from trade_offers where id = p_trade_id for update;
 
@@ -235,6 +240,58 @@ begin
   from trade_offers where id = p_trade_id;
 
   if v_both_confirmed then
+    -- Transfer offered cards (initiator's cards) → recipient
+    for v_card_id in
+      select user_card_id from trade_items where trade_id = p_trade_id and direction = 'offer'
+    loop
+      select catalog_card_id, condition, quantity
+        into v_catalog_card_id, v_condition, v_quantity
+        from user_cards where id = v_card_id;
+
+      select id into v_existing_id
+        from user_cards
+        where user_id = v_trade.recipient_id
+          and catalog_card_id = v_catalog_card_id
+          and condition = v_condition;
+
+      if v_existing_id is not null then
+        -- recipient already owns this card: merge quantity, remove traded copy
+        update user_cards set quantity = quantity + v_quantity where id = v_existing_id;
+        delete from user_cards where id = v_card_id;
+      else
+        -- transfer ownership
+        update user_cards
+          set user_id = v_trade.recipient_id, for_trade = false, updated_at = now()
+          where id = v_card_id;
+      end if;
+    end loop;
+
+    -- Transfer requested cards (recipient's cards) → initiator
+    for v_card_id in
+      select user_card_id from trade_items where trade_id = p_trade_id and direction = 'request'
+    loop
+      select catalog_card_id, condition, quantity
+        into v_catalog_card_id, v_condition, v_quantity
+        from user_cards where id = v_card_id;
+
+      select id into v_existing_id
+        from user_cards
+        where user_id = v_trade.initiator_id
+          and catalog_card_id = v_catalog_card_id
+          and condition = v_condition;
+
+      if v_existing_id is not null then
+        -- initiator already owns this card: merge quantity, remove traded copy
+        update user_cards set quantity = quantity + v_quantity where id = v_existing_id;
+        delete from user_cards where id = v_card_id;
+      else
+        -- transfer ownership
+        update user_cards
+          set user_id = v_trade.initiator_id, for_trade = false, updated_at = now()
+          where id = v_card_id;
+      end if;
+    end loop;
+
     update trade_offers set status = 'completed', updated_at = now() where id = p_trade_id;
   end if;
 end;
