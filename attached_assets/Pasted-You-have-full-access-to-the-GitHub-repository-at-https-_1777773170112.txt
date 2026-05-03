@@ -1,0 +1,108 @@
+You have full access to the GitHub repository at https://github.com/K1ngs1/kepler.
+
+## CURRENT STATE OF THE REPO (DO NOT REBUILD THESE)
+- Supabase project is connected. Keys are in `.replit` environment.
+- Database migration `supabase/migrations/001_schema.sql` already has these tables:
+  - `catalog_cards` (id, tcgdex_id, name, set_name, set_code, number, rarity, image_url)
+  - `user_cards` (id, user_id, catalog_card_id, condition, quantity, for_trade, wanted, notes)
+  - `trade_offers` (id, initiator_id, recipient_id, status, created_at, updated_at)  
+    status column is type `text` – we'll keep it but ensure the functions use the correct states.
+  - `trade_items` (id, trade_id, user_card_id, direction) – direction is 'offer' or 'request'
+  - `profiles` (id, username, avatar_url, location, reputation_score) – profiles auto‑created on signup via a trigger.
+  - `lots` and `bids` tables (not needed for the trading app – ignore them).
+- RLS policies exist for `catalog_cards` (public read), `user_cards` (owner access), `trade_offers` (participants), `trade_items` (participants).
+- Seed script `scripts/seed-catalog.mjs` populates `catalog_cards` from the free TCGdex API. It’s functional.
+- The frontend is currently the old `backend/index.html` mockup – a single HTML file with CDN React. The Replit config starts that via FastAPI. That mockup must be completely replaced.
+
+## WHAT IS MISSING (YOU MUST BUILD ALL OF THIS)
+
+### 1. Additional Database Tables & Functions
+Create a new migration file `supabase/migrations/002_trade_functions.sql` with:
+
+**a) `trade_messages` table**
+- Columns: `id uuid primary key default uuid_generate_v4()`, `trade_id uuid references trade_offers(id) on delete cascade`, `sender_id uuid references profiles(id) on delete cascade`, `content text not null`, `sent_at timestamptz default now()`.
+- Add RLS: users can only see messages for trades where they are initiator or recipient; sender can only insert their own messages.
+- Enable it in the realtime publication.
+
+**b) Trade logic functions (all `SECURITY DEFINER`)**
+
+1. `propose_trade(p_recipient_id uuid, p_offered_card_ids uuid[], p_requested_card_ids uuid[])`
+   - Verify each offered card is owned by the caller and has `for_trade = true`.
+   - Verify each requested card is owned by the recipient and has `for_trade = true`.
+   - Insert a row into `trade_offers` with `status = 'proposed'`, initiator_id = auth.uid(), recipient_id = p_recipient_id.
+   - Insert into `trade_items` for each offered card with direction = 'offer', and each requested card with direction = 'request'.
+   - Return the new trade id.
+
+2. `accept_trade(p_trade_id uuid)`
+   - Check caller is the recipient and trade status is 'proposed'.
+   - Atomically (in a transaction block) do:
+     - Update ALL `user_cards` involved in this trade (both sides) to `for_trade = false`.
+     - Set trade status to 'accepted'.
+   - Raise exception if any card is no longer for_trade.
+
+3. `counter_offer(p_trade_id uuid, p_offered_card_ids uuid[], p_requested_card_ids uuid[])`
+   - Caller must be a participant, status must be 'proposed' or 'countered'.
+   - Delete existing `trade_items` for this trade.
+   - Insert new ones as in propose_trade.
+   - Reset status to 'proposed' (and update `updated_at`).
+
+4. `cancel_trade(p_trade_id uuid)`
+   - Either participant can cancel if status is 'proposed' or 'countered'. Set status to 'cancelled'.
+
+5. `complete_trade(p_trade_id uuid)`
+   - Add two boolean columns to `trade_offers` if they don’t already exist: `initiator_confirmed boolean default false` and `recipient_confirmed boolean default false`.
+   - When a participant calls this function, set their confirmation flag to true.
+   - When both flags are true, set status to 'completed'.
+
+**c) Realtime publication**
+Add `trade_messages` to the existing publication:
+`alter publication supabase_realtime add table trade_messages;`
+
+### 2. Frontend: Build a proper Next.js 14 App
+The old `index.html` and `backend/` are the mockup. You must create a new `frontend/` directory with a full Next.js 14 app that uses:
+- TypeScript, Tailwind CSS, shadcn/ui.
+- The existing Supabase project (use credentials from environment).
+- The exact same Kepler dark premium branding: dark background (`#0a0a0f` or similar), gold accents (`#c9a55c`), serif fonts (Playfair Display or similar), card shadows, the original navigation look. Keep the visual identity intact, but now powered by real data.
+
+**Setup steps you must perform in the project root:**
+- Run `npx create-next-app@latest frontend` with answers: TypeScript yes, Tailwind yes, App Router yes, no src directory.
+- Install `@supabase/supabase-js`, `@supabase/ssr`, `shadcn-ui` (and init it).
+- Create `lib/supabase/client.ts` and `lib/supabase/server.ts` for client and server components.
+
+**Pages & Data Requirements (every page must use Supabase queries – NO hardcoded fake data)**
+
+- `app/layout.tsx` – dark navigation bar with Kepler logo, Home, Catalog, Collection, Trades, profile, and working login/signup/logout via Supabase Auth.
+- `app/page.tsx` – Homepage: hero carousel of the most recently added `catalog_cards` (fetch top 5 ordered by `created_at desc`). "Hot Cards" grid (cards that appear most in `user_cards`). "Recently Completed Trades" list (last 5 `trade_offers` with status 'completed').
+- `app/auth/callback/route.ts` – Supabase auth callback handler.
+- `app/catalog/page.tsx` – Browse `catalog_cards`. Grid with card image, name, set, rarity. Search bar (client-side filter). "Add to Collection" button that opens a modal to choose condition and quantity, then inserts into `user_cards`.
+- `app/catalog/[id]/page.tsx` – Card detail page showing large image and all info.
+- `app/collection/page.tsx` – Displays the user’s `user_cards` with toggle switches for `for_trade` and `wanted`. Remove button to delete the card. Show counts (total cards, tradeables, wishlist). All updates go through Supabase.
+- `app/trades/page.tsx` – List of all `trade_offers` where the current user is a participant, ordered by `updated_at desc`. Subscribe to changes on `trade_offers` (using Supabase Realtime) so new offers appear instantly. Each row shows the other user’s name, cards involved (thumbnails), status badge, and last message snippet.
+- `app/trades/[id]/page.tsx` – Trade detail. Show both sides (cards with images and conditions). Real‑time chat panel: fetch existing `trade_messages`, subscribe to new inserts for this trade, display them instantly. Sending a message inserts into `trade_messages`. Action buttons (Accept, Counter, Cancel, Confirm Receipt) must call the corresponding PostgreSQL functions via `supabase.rpc()`. The buttons must appear/disappear based on trade status and participant role.
+- `app/trades/new/page.tsx` – Trade proposal form. Accept `?with=userId` query parameter. Load the current user’s cards (`for_trade = true`) and the recipient’s cards (`for_trade = true`). Let the user select cards to give and cards to request. Submit calls `supabase.rpc('propose_trade', ...)`.
+- `app/wishlist/page.tsx` – Show cards the user has marked `wanted`. Also suggest matches: other users who have those cards `for_trade = true`. For each match, show a "Propose Trade" button linking to the trade form.
+
+**Realtime subscriptions:** Use `supabase.channel('...').on('postgres_changes', ...)` on the trades list and trade detail pages.
+
+**Authentication:** Replace the current non‑functional login with fully working Supabase Auth. Use `supabase.auth.signInWithPassword`, `signUp`, `signInWithOAuth` (Google). The nav must reflect auth state.
+
+### 3. Update .replit Configuration
+Change the run command to start the Next.js app instead of the old FastAPI backend:
+`cd frontend && npm run dev -- --hostname 0.0.0.0 --port 5000`
+Preserve the existing environment variables (Supabase URL, keys).
+
+### CRITICAL CONSTRAINTS
+- Everything must work within Supabase free tier (500 MB database, 1 GB storage).
+- No paid APIs. Use only TCGdex for card data (the seed script already does this).
+- All trade state changes must go through the PostgreSQL functions (`propose_trade`, `accept_trade`, etc.) – never update the trade status directly from the client.
+- Fully typed TypeScript throughout the frontend.
+- Keep the old `backend/` folder and its files intact; do not delete them. The new frontend lives in `frontend/`.
+- The Kepler visual identity must be preserved exactly – dark luxury theme, gold accents, card‑style UI elements.
+
+### DELIVERABLES
+1. `supabase/migrations/002_trade_functions.sql`
+2. Complete `frontend/` directory with all pages, components, and utilities described above.
+3. Updated `.replit` run command.
+4. Any additional small components in `components/` as needed (e.g., CardGrid, TradeStatusBadge, ChatPanel).
+
+Start by examining `supabase/migrations/001_schema.sql` and the seed script to understand the exact column names and data shapes. Then implement everything listed, ensuring zero placeholder/mock data remains in the final app.
