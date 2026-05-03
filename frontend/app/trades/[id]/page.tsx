@@ -19,8 +19,8 @@ interface TradeItem {
   user_card_id: string;
   user_cards: {
     condition: string;
-    catalog_cards: CardInfo;
-  };
+    catalog_cards: CardInfo | null;
+  } | null;
 }
 
 interface TradeMessage {
@@ -199,21 +199,24 @@ export default function TradeDetailPage() {
                 </div>
                 {offered.length === 0 ? (
                   <div style={{ color: '#ccc', fontSize: 12 }}>No cards</div>
-                ) : offered.map((item) => (
-                  <div key={item.id} className="collection-card" style={{ marginBottom: 10 }}>
-                    <div className="collection-card-img">
-                      {item.user_cards.catalog_cards.image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.user_cards.catalog_cards.image_url} alt={item.user_cards.catalog_cards.name} loading="lazy" style={{ maxHeight: 110, maxWidth: '85%', objectFit: 'contain' }} />
-                      ) : <div style={{ color: '#ccc', fontSize: 11 }}>No image</div>}
+                ) : offered.map((item) => {
+                  const card = item.user_cards?.catalog_cards;
+                  return (
+                    <div key={item.id} className="collection-card" style={{ marginBottom: 10 }}>
+                      <div className="collection-card-img">
+                        {card?.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={card.image_url} alt={card.name} loading="lazy" style={{ maxHeight: 110, maxWidth: '85%', objectFit: 'contain' }} />
+                        ) : <div style={{ color: '#ccc', fontSize: 11 }}>No image</div>}
+                      </div>
+                      <div className="collection-card-body">
+                        <div className="collection-card-name">{card?.name ?? 'Unknown card'}</div>
+                        <div className="collection-card-set">{card ? `${card.set_name} · #${card.number}` : '—'}</div>
+                        <div style={{ fontSize: 11, color: '#888' }}>{item.user_cards?.condition ?? ''}</div>
+                      </div>
                     </div>
-                    <div className="collection-card-body">
-                      <div className="collection-card-name">{item.user_cards.catalog_cards.name}</div>
-                      <div className="collection-card-set">{item.user_cards.catalog_cards.set_name} · #{item.user_cards.catalog_cards.number}</div>
-                      <div style={{ fontSize: 11, color: '#888' }}>{item.user_cards.condition}</div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Requested */}
@@ -223,21 +226,24 @@ export default function TradeDetailPage() {
                 </div>
                 {requested.length === 0 ? (
                   <div style={{ color: '#ccc', fontSize: 12 }}>No cards</div>
-                ) : requested.map((item) => (
-                  <div key={item.id} className="collection-card" style={{ marginBottom: 10 }}>
-                    <div className="collection-card-img">
-                      {item.user_cards.catalog_cards.image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.user_cards.catalog_cards.image_url} alt={item.user_cards.catalog_cards.name} loading="lazy" style={{ maxHeight: 110, maxWidth: '85%', objectFit: 'contain' }} />
-                      ) : <div style={{ color: '#ccc', fontSize: 11 }}>No image</div>}
+                ) : requested.map((item) => {
+                  const card = item.user_cards?.catalog_cards;
+                  return (
+                    <div key={item.id} className="collection-card" style={{ marginBottom: 10 }}>
+                      <div className="collection-card-img">
+                        {card?.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={card.image_url} alt={card.name} loading="lazy" style={{ maxHeight: 110, maxWidth: '85%', objectFit: 'contain' }} />
+                        ) : <div style={{ color: '#ccc', fontSize: 11 }}>No image</div>}
+                      </div>
+                      <div className="collection-card-body">
+                        <div className="collection-card-name">{card?.name ?? 'Unknown card'}</div>
+                        <div className="collection-card-set">{card ? `${card.set_name} · #${card.number}` : '—'}</div>
+                        <div style={{ fontSize: 11, color: '#888' }}>{item.user_cards?.condition ?? ''}</div>
+                      </div>
                     </div>
-                    <div className="collection-card-body">
-                      <div className="collection-card-name">{item.user_cards.catalog_cards.name}</div>
-                      <div className="collection-card-set">{item.user_cards.catalog_cards.set_name} · #{item.user_cards.catalog_cards.number}</div>
-                      <div style={{ fontSize: 11, color: '#888' }}>{item.user_cards.condition}</div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
