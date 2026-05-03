@@ -1,0 +1,338 @@
+You have full access to the GitHub repository at https://github.com/K1ngs1/kepler.
+
+### YOUR MISSION
+Transform Kepler from an all-mockup prototype into a fully functional Pokémon card
+trading platform by building a real Next.js frontend that talks directly to the
+existing Supabase database. The visual design must remain pixel‑identical to the
+current index.html. Only the data source changes.
+
+### CRITICAL BACKGROUND — READ FIRST
+
+The repo currently has two separate, disconnected halves:
+
+1. **The frontend (`index.html`)** — a single‑file React 18 app loaded via CDN.
+   Every piece of data is hardcoded in the Babel script tag:
+   `HERO_SLIDES`, `AUCTIONS_DATA`, `SIDEBAR_LIST`, `LOTS_DATA`, and a `DETAIL`
+   object. No Supabase SDK exists. No API calls are made. Auth modals are visual
+   only. This is the ONLY working UI.
+
+2. **The database (Supabase)** — fully built with tables (`catalog_cards`,
+   `user_cards`, `trade_offers`, `trade_items`, `trade_messages`, `profiles`),
+   RLS policies, and five PostgreSQL trade functions (`propose_trade`,
+   `accept_trade`, `counter_offer`, `cancel_trade`, `complete_trade`). These
+   have never been connected to any frontend.
+
+Your task is to build the bridge between these two halves.
+
+### STEP 1 — Replace the Broken Frontend Submodule
+
+The `frontend/` folder is a 0‑byte git submodule with a null git_url. Delete it
+completely (including the submodule reference in `.gitmodules` if it exists) and
+create a real Next.js 14 project in its place:
+
+```bash
+cd kepler
+npx create-next-app@latest frontend --typescript --tailwind --eslint --app --src-dir=false --import-alias="@/*"
+```
+
+Then install these packages:
+
+```bash
+cd frontend
+npm install @supabase/supabase-js @supabase/ssr zod
+```
+
+STEP 2 — Extract the Exact Design Tokens from index.html
+
+Before writing any component, read index.html completely. Extract:
+
+· Fonts: Libre Baskerville (headings/nav logo) and Inter (body).
+  Load them from Google Fonts in your root layout.
+· Colors:
+  · Page background: #fff
+  · Primary text: #111
+  · Secondary/muted text: #555, #777, #888, #999
+  · Border colors: #e5e5e5 (light), #ccc (medium), #ddd (input focus)
+  · Nav background: #fff
+  · Button primary: #111 (bg) with #fff (text), hover #333
+  · Live badge: #3db56c
+  · PSA slab blue: #1c3f8a
+  · Modal overlay: rgba(0,0,0,0.4)
+  · Card background: #fff
+  · Auction card overlays: dark gradients
+  · Star/watchlist inactive: #bbb
+· Typography:
+  · Nav logo: 22px, weight 700, letter-spacing -0.3px
+  · Card titles: 14px, weight 700
+  · Lot titles: 12.5px
+  · Lot prices: 18px, weight 700
+  · Body: 14px
+  · Secondary text: 12–13px
+· Spacing & layout:
+  · Nav: 56px height, sticky, 20px horizontal padding
+  · Card grid: 3 columns, 20px gap
+  · Lot cards: 420px height, 1px border, 4px radius
+  · Sidebar: 250px width, sticky at top:56px
+· All 1229 lines of CSS classes — .nav, .nav-logo, .hero-*, .auction-card-*,
+  .lot-card-*, .sidebar-*, .listing-*, .detail-*, .login-*, .modal-*,
+  .footer-*, .slab-*
+
+Configure Tailwind's theme.extend to match these exact values. Define custom
+fonts, colors, spacing, and shadows. The resulting pages must be visually
+indistinguishable from the current index.html.
+
+STEP 3 — Set Up the Supabase Client
+
+Create lib/supabase/client.ts:
+
+```typescript
+import { createClient } from '@supabase/supabase-js';
+
+export const createBrowserClient = () =>
+  createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+```
+
+Create lib/supabase/server.ts for Server Components using @supabase/ssr.
+
+STEP 4 — Build Every Page with Real Supabase Data
+
+The old index.html is a single-page app with no routing. You must create a
+multi-page Next.js app where every page fetches from Supabase — NO hardcoded
+data anywhere.
+
+All pages must use the exact CSS/design extracted in Step 2.
+
+app/layout.tsx — Root Layout
+
+· Google Fonts link for Libre Baskerville + Inter
+· Sticky white nav bar, 56px, identical CSS to .nav
+· "Kepler" logo text using Libre Baskerville (22px, 700 weight)
+· Nav links: Trade, Private Sales, Calendar, Results, Login/Sell
+· The Login button opens a modal (see auth section below)
+· Auth state: if user is logged in, show their username/avatar and a Logout
+  button instead of Login
+
+app/page.tsx — Homepage (replaces the current hero + auctions)
+
+· Hero carousel: Instead of hardcoded HERO_SLIDES, fetch the 3 most
+  recently added cards from catalog_cards ordered by created_at desc,
+  limit 3. Use their set_name as the "eyebrow", name as the title, and
+  image_url as the background. Keep the gradient overlays.
+· Auctions section (currently "Active Auctions"): Repurpose this as
+  "Cards Available for Trade". Query:
+  ```js
+  supabase
+    .from('user_cards')
+    .select('*, catalog_cards(*), profiles(username, avatar_url)')
+    .eq('for_trade', true)
+    .order('created_at', { ascending: false })
+    .limit(6)
+  ```
+· Display each card using the .auction-card CSS classes, showing:
+  catalog_cards.image_url, name, and the owner's profiles.username.
+  Replace the "Live" badge with "For Trade".
+· Each card links to /trades/new?with=<owner_user_id>.
+
+app/catalog/page.tsx — Card Catalog
+
+· Fetch from catalog_cards with pagination (.range(0, 20))
+· Display as a 3-column grid using the .lots-grid and .lot-card CSS
+· Each card shows image_url, name, set_name, number, rarity
+· Search bar that filters by name/set client-side or via Supabase .ilike()
+· "Add to Collection" button on each card → opens a modal to choose condition
+  (Mint, Near Mint, Lightly Played, Moderately Played, Heavily Played, Damaged)
+  and quantity, then inserts into user_cards
+· Sidebar: Instead of hardcoded SIDEBAR_LIST, show sets from catalog_cards:
+  ```js
+  supabase.from('catalog_cards').select('set_name, set_code').order('set_name')
+  ```
+  Group by set_name with counts, using .sidebar-group and .sidebar-item CSS
+
+app/catalog/[id]/page.tsx — Card Detail
+
+· Fetch single card from catalog_cards by id
+· Show large image in .detail-img-col, card info in .detail-bid-col
+· Instead of "Place Bid" / "Buy Now", show:
+  · "Add to Collection" button
+  · If the card is in the user's user_cards, show toggle for for_trade and
+    wanted
+
+app/collection/page.tsx — My Collection
+
+· Fetch the authenticated user's user_cards joined with catalog_cards:
+  ```js
+  supabase.from('user_cards').select('*, catalog_cards(*)').eq('user_id', userId)
+  ```
+· Display as a .lots-grid with toggle switches for for_trade and wanted
+  (call supabase.from('user_cards').update(...) on toggle)
+· Remove button that deletes the row
+· Show real counts: "X cards in collection", "Y for trade", "Z wanted"
+
+app/trades/page.tsx — Trade List
+
+· Fetch all trade_offers where the current user is initiator or recipient
+· Join with trade_items and catalog_cards to show card images
+· Join with profiles to show the other user's name
+· Show status badges: proposed (yellow), countered (orange), accepted
+  (green), completed (blue), cancelled (gray)
+· Subscribe to real-time changes:
+  ```js
+  supabase
+    .channel('trade-updates')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'trade_offers',
+      filter: `initiator_id=eq.${userId}`
+    }, () => refetch())
+    .subscribe()
+  ```
+
+app/trades/[id]/page.tsx — Trade Detail + Chat
+
+· Fetch the specific trade with all items and messages
+· Display offered/requested cards side by side using .lot-card CSS
+· Chat panel: Show existing trade_messages ordered by sent_at asc.
+  Subscribe to new messages in real time. Input field at bottom to send
+  messages (insert into trade_messages).
+· Action buttons that call PostgreSQL functions via supabase.rpc():
+  · If status is proposed and current user is recipient →
+    "Accept" calls accept_trade({ p_trade_id: tradeId }),
+    "Counter" navigates to /trades/new?with=<otherUserId>&counter=<tradeId>,
+    "Cancel" calls cancel_trade({ p_trade_id: tradeId })
+  · If status is proposed and current user is initiator → "Cancel"
+  · If status is accepted → "Confirm Receipt" calls
+    complete_trade({ p_trade_id: tradeId }). Show a toast when both have
+    confirmed and status changes to completed.
+  · If status is completed → "Trade Completed" message
+· Wrap every RPC call in try/catch. Show error messages from the database
+  (e.g., "Card is no longer available") using react-hot-toast.
+
+app/trades/new/page.tsx — Trade Proposal Form
+
+· Accept ?with=<recipientId> query parameter
+· Display two columns: current user's for-trade cards and recipient's
+  for-trade cards
+· Allow selecting cards (checkboxes) from each side
+· Submit calls:
+  ```js
+  supabase.rpc('propose_trade', {
+    p_recipient_id: recipientId,
+    p_offered_card_ids: [...selectedOfferedCardIds],
+    p_requested_card_ids: [...selectedRequestedCardIds]
+  })
+  ```
+· On success, redirect to /trades/[newTradeId]
+
+app/wishlist/page.tsx — Wishlist + Match Suggestions
+
+· Show user's user_cards where wanted = true
+· Match suggestions: Find other users who have those wanted cards marked
+  for_trade = true. For each match, show the card image, the owner's
+  username, and a "Propose Trade" button.
+
+STEP 5 — Authentication
+
+· Supabase Auth: The frontend must use Supabase Auth for login/signup.
+· Replicate the existing login modal (login-modal, login-close,
+  login-logo, login-heading, login-sub, login-google-btn,
+  login-divider, login-field-*, login-submit-btn, login-register-txt
+  classes) exactly, but wire it to:
+  · /auth/v1/callback for Google OAuth
+  · supabase.auth.signInWithPassword() for email login
+  · supabase.auth.signUp() for email registration
+· On successful sign-in, close the modal and update the nav bar.
+· The profiles table is auto-populated via the handle_new_user() trigger.
+  After signup, show a brief "Set your username" prompt if desired.
+
+STEP 6 — Real-time Subscriptions
+
+Enable Supabase Realtime across the app:
+
+· On /trades page: subscribe to trade_offers changes for the current user
+· On /trades/[id]: subscribe to trade_messages inserts and to status
+  changes on the specific trade offer
+· On / homepage: subscribe to new user_cards where for_trade = true so
+  the "Available for Trade" section updates live
+
+STEP 7 — Fix the .replit Configuration
+
+Update .replit so the run command actually starts Next.js:
+
+· Keep the workflow: cd frontend && npm run dev -- --hostname 0.0.0.0 --port 5000
+· Change the deployment run command: instead of uvicorn server:app, use the
+  same Next.js command
+· The Supabase credentials in [userenv.shared] can stay, but add a note:
+  "ROTATE THIS KEY BEFORE PUBLIC LAUNCH — currently committed to version control"
+
+STEP 8 — Remove Every Trace of Hardcoded Data
+
+After building all pages, verify that these variables no longer exist anywhere
+in the working frontend:
+
+· HERO_SLIDES
+· AUCTIONS_DATA
+· SIDEBAR_LIST
+· LOTS_DATA
+· DETAIL
+
+Do NOT delete the old index.html, backend/, or data.py — they are
+legacy artifacts and must stay in the repo. Just stop using them.
+
+STEP 9 — Verify Every Feature Works
+
+Test the complete flow:
+
+1. Open the app → see the Kepler homepage with real catalog cards in the hero
+2. Click "Login" → sign in with Google → see your username in the nav
+3. Browse /catalog → see real Pokémon cards (1,500+ from TCGdex seed)
+4. Click "Add to Collection" on Charizard → choose "Mint" → it appears in
+   /collection
+5. Toggle Charizard to "For Trade" → it appears on the homepage "Available for
+   Trade" section
+6. Another user (different browser/incognito) sees Charizard on the homepage
+7. That user clicks "Propose Trade" → selects their Blastoise → submits
+8. Charizard owner receives real-time notification → opens trade
+9. Charizard owner clicks "Accept" → both cards are locked
+   (for_trade = false)
+10. Both users click "Confirm Receipt" → trade status becomes completed
+
+CRITICAL CONSTRAINTS
+
+1. DO NOT CHANGE THE UI. Every color, font, spacing, border, shadow, and
+   layout must match the original index.html exactly. The only permitted
+   visual change is replacing fake auction titles with real card data.
+2. All data must come from Supabase — remove every hardcoded array/object.
+3. All trade state changes must use the PostgreSQL functions via
+   supabase.rpc() — never update trade statuses directly from the client.
+4. Use the exact table and column names from the migration files:
+   · catalog_cards (id, name, set_name, set_code, number, rarity, image_url,
+     tcgdex_id)
+   · user_cards (id, user_id, catalog_card_id, condition, quantity,
+     for_trade, wanted, notes)
+   · trade_offers (id, initiator_id, recipient_id, status, message,
+     initiator_confirmed, recipient_confirmed)
+   · trade_items (id, trade_id, user_card_id, direction) — direction is
+     'offer' or 'request'
+   · trade_messages (id, trade_id, sender_id, content, sent_at)
+   · profiles (id, username, avatar_url, location, reputation_score)
+5. Do not delete backend/, server.py, data.py, or index.html.
+6. The Supabase anon key is exposed in .replit. Keep it in .env.local
+   (gitignored) for the Next.js app. Add a comment noting it should be rotated
+   before public launch.
+7. Fully typed TypeScript throughout.
+8. The seed script exists at scripts/seed-catalog.mjs — ensure the catalog
+   pages handle the case where the catalog hasn't been seeded yet (show a
+   helpful message).
+
+DELIVERABLES
+
+1. A complete frontend/ directory with all Next.js pages, components, and
+   utilities
+2. Updated .replit configuration
+3. frontend/.env.local.example with placeholder Supabase credentials
+4. A note in README.md about rotating the exposed Supabase key
+5. Zero hardcoded mock data anywhere in the working frontend
