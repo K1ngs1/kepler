@@ -1,0 +1,121 @@
+You have full access to the GitHub repository at https://github.com/K1ngs1/kepler.
+
+## YOUR MISSION
+Fix the `/auctions` page (which is supposed to show tradeable cards) so it shows REAL data from the Supabase database instead of hardcoded fake data. Currently a user with a Charizard in their collection marked `for_trade = true` cannot see that Charizard on the trade page.
+
+## THE ROOT CAUSE
+The frontend (`index.html`, 60KB single-file React app loaded via CDN) makes API calls to `backend/main.py` (FastAPI), which returns hardcoded mock data from `backend/data.py`. The `/auctions` page calls `GET /api/auctions` and receives the static `AUCTIONS_DATA` array. The Supabase database (which has real tables, real data, and real trade functions) is never queried by the frontend.
+
+The Supabase credentials already exist in `.replit` → `[userenv.shared]`:
+- URL: `https://yquwasetajootlgmyxan.supabase.co`
+- Anon key: the full key is in `.replit`
+
+## WHAT YOU MUST DO
+
+### Step 1: Add the Supabase client to index.html
+- In the `<head>` or before the main React script, add the Supabase JS SDK via CDN:
+  `<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>`
+- Initialize a Supabase client at the top of the application code using the credentials already in `.replit`:
+  ```js
+  const supabase = window.supabase.createClient(
+    'https://yquwasetajootlgmyxan.supabase.co',
+    'eyJh...'  // the full anon key from .replit [userenv.shared]
+  );
+Step 2: Replace the auctions API call with a real Supabase query
+Find the React component that renders the /auctions page. It currently calls fetch('/api/auctions') or similar, which hits the FastAPI backend. Replace that with:
+supabase
+  .from('user_cards')
+  .select('*, catalog_cards(*)')
+  .eq('for_trade', true)
+This query joins user_cards with catalog_cards (which contains name, image_url, set_name, rarity) and returns only cards that real users have marked as available for trade.
+
+Step 3: Map the real data to the existing UI
+The auction cards currently display: title, price, bids, grade, set, premium. These fields don't match the user_cards schema. Repurpose them:
+
+image → catalog_cards.image_url
+
+title → catalog_cards.name + catalog_cards.set_name
+
+grade → user_cards.condition (Mint, Near Mint, etc.)
+
+set → catalog_cards.set_code + catalog_cards.number
+
+bids → (hide this; it's not applicable for trades)
+
+price → (hide this; trades are card-for-card, not dollar amounts)
+
+premium → (hide this)
+
+Add: the owner's username (join profiles table via user_id)
+
+Add: a "Propose Trade" button that navigates to a trade proposal form
+
+Step 4: Handle authentication
+The user must be logged in to propose a trade. Add Supabase Auth:
+
+Call supabase.auth.getSession() on page load to check if the user is logged in
+
+If logged in, show their username in the nav and enable the "Propose Trade" button
+
+If not logged in, show a "Login to Trade" button that triggers supabase.auth.signInWithOAuth({ provider: 'google' }) or a simple email/password modal
+
+Use the existing profiles table (auto-created on signup via handle_new_user() trigger)
+
+Step 5: Remove all dependencies on the FastAPI backend
+No more calls to /api/auctions, /api/hero, /api/lots, /api/sidebar, or any other endpoint from backend/main.py
+
+Every data fetch on every page must use Supabase queries instead
+
+Step 6: Do the same for other pages
+Hero carousel (/api/hero): replace with supabase.from('catalog_cards').select('*').order('created_at', { ascending: false }).limit(5)
+
+Lot grid (/api/lots): replace with supabase.from('catalog_cards').select('*').range(0, 20)
+
+Sidebar (/api/sidebar): replace with a list of sets from catalog_cards
+
+CRITICAL CONSTRAINTS
+DO NOT CHANGE THE UI. All colours, fonts, spacing, shadows, card styles, navigation bar, hero carousel, sidebar layout, and overall aesthetic must remain pixel-identical to the current index.html.
+
+After your changes, the /auctions page must show the user's own Charizard (if it's in their collection with for_trade = true).
+
+Use the EXACT table and column names from supabase/migrations/001_schema.sql:
+
+catalog_cards (id, name, set_name, set_code, number, rarity, image_url)
+
+user_cards (id, user_id, catalog_card_id, condition, quantity, for_trade, wanted)
+
+trade_offers (id, initiator_id, recipient_id, status, ...)
+
+trade_items (id, trade_id, user_card_id, direction)
+
+trade_messages (id, trade_id, sender_id, content, sent_at)
+
+profiles (id, username, ...)
+
+Do NOT delete the backend/ folder or its files. Just stop the frontend from calling them.
+
+The Supabase anon key is already exposed in .replit. Use it as-is. The user can rotate it later.
+
+For the "Propose Trade" button, call the existing PostgreSQL function propose_trade(p_recipient_id, p_offered_card_ids, p_requested_card_ids) via supabase.rpc().
+
+DELIVERABLES
+Modified index.html with Supabase client added, all API calls replaced with real database queries, and auth wired up.
+
+A summary of every fake data source removed and which real query replaced it.
+
+VERIFICATION CHECKLIST
+After implementation, the following must be true:
+
+Navigate to /auctions — see real cards from the database (including the Charizard), not fake auction titles like "2026 Spring Pokémon Elite Auction".
+
+The card grid shows card images, names, conditions, and owner information.
+
+If logged out, a "Login to Trade" button appears.
+
+If logged in, a "Propose Trade" button appears on each card.
+
+No errors in the browser console related to missing Supabase data.
+
+Start by reading index.html completely to understand the current component structure, then add the Supabase client and systematically replace every API call. Keep the Kepler visual design untouched.
+
+
