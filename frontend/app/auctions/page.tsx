@@ -224,6 +224,7 @@ export default function AuctionsPage() {
               )}
             </div>
           ) : viewMode === 'list' ? (
+            <div className="trades-table-wrap">
             <table className="trades-table">
               <thead>
                 <tr>
@@ -277,6 +278,7 @@ export default function AuctionsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           ) : (
             <div className="lots-grid">
               {filtered.map((card) => (

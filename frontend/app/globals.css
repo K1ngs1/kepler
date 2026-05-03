@@ -442,3 +442,92 @@ input, select { font-family: inherit; }
 
   .for-trade-grid { grid-template-columns: 1fr; }
 }
+
+/* ═══ MOBILE IMPROVEMENTS ROUND 2 ═══ */
+
+@media (max-width: 768px) {
+
+  /* ── NAV: hide search, keep logo + hamburger only ── */
+  .nav-search-wrap { display: none; }
+  .nav { padding: 0 14px; gap: 8px; }
+  .nav-logo { font-size: 19px; }
+
+  /* ── MODAL: full-width on mobile ── */
+  .modal { width: 94vw; padding: 20px 16px; }
+  .login-modal { width: 94vw; padding: 28px 18px 20px; }
+  .modal-bg { align-items: flex-end; padding-bottom: 0; }
+
+  /* ── TRADE DETAIL: stack the 2-column grid ── */
+  .trade-detail-grid {
+    display: flex !important;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── TRADE CARDS: side-by-side stays but shrinks ── */
+  .trade-cards-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  /* ── PROPOSE TRADE: card picker grid single col ── */
+  .card-picker-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  /* ── TRADE DETAIL CHAT: fixed height becomes flexible ── */
+  .trade-chat-panel {
+    height: 340px;
+  }
+
+  /* ── TOOLBAR: hide view-mode buttons on mobile ── */
+  .view-btns { display: none; }
+
+  /* ── TOOLBAR SEARCH: expand to fill ── */
+  .toolbar-search { flex: 1; }
+  .toolbar-search input { width: 100%; }
+
+  /* ── COLLECTION CARD BODY: smaller text ── */
+  .collection-card-name { font-size: 11.5px; }
+  .collection-card-set { font-size: 10px; }
+  .toggle-row { font-size: 11px; }
+
+  /* ── CATALOG CARD BODY ── */
+  .catalog-card-name { font-size: 12px; }
+  .catalog-card-set { font-size: 10.5px; }
+  .catalog-card-add { font-size: 11.5px; padding: 6px; }
+
+  /* ── LOT CARD BODY ── */
+  .lot-title { font-size: 11.5px; }
+  .lot-bid-btn { font-size: 12px; padding: 7px; }
+
+  /* ── FOOTER ── */
+  .footer { padding: 28px 16px 16px; }
+}
+
+@media (max-width: 480px) {
+
+  /* ── TRADE CARDS: stack to single col on very small phones ── */
+  .trade-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── CARD PICKER: single col on very small phones ── */
+  .card-picker-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── SECTION PADDING ── */
+  .section { padding: 14px 10px 12px; }
+
+  /* ── COLLECTION / CATALOG: single col already set, smaller imgs ── */
+  .collection-card-img { height: 100px; }
+  .catalog-card-img { height: 110px; }
+
+  /* ── MODAL: slide up from bottom ── */
+  .modal { border-radius: 10px 10px 0 0; }
+  .login-modal { border-radius: 10px 10px 0 0; }
+}

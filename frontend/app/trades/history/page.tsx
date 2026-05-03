@@ -85,6 +85,7 @@ export default function TradeHistoryPage() {
             <div style={{ fontSize: 13, color: '#888' }}>No {filter !== 'all' ? filter : ''} trades in history.</div>
           </div>
         ) : (
+          <div className="trades-table-wrap">
           <table className="trades-table">
             <thead>
               <tr>
@@ -113,6 +114,7 @@ export default function TradeHistoryPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
       <Footer />

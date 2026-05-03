@@ -288,11 +288,11 @@ export default function TradeDetailPage() {
         {/* Timeline */}
         <TradeTimeline status={trade.status} />
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
+        <div className="trade-detail-grid">
           {/* Left: trade items + actions */}
           <div>
             {/* Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
+            <div className="trade-cards-grid" style={{ marginBottom: 24 }}>
               {/* Offered */}
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#555', marginBottom: 10 }}>

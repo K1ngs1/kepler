@@ -162,6 +162,7 @@ export default function WishlistPage() {
                 <div className="section-hd" style={{ marginBottom: 16 }}>
                   <div className="section-hd-title">Trade Matches — People offering your wanted cards</div>
                 </div>
+                <div className="trades-table-wrap">
                 <table className="trades-table">
                   <thead>
                     <tr>
@@ -191,6 +192,7 @@ export default function WishlistPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             )}
           </>

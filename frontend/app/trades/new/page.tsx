@@ -40,7 +40,7 @@ function CardPicker({ cards, selected, onToggle, label }: CardPickerProps) {
       {cards.length === 0 ? (
         <div style={{ color: '#aaa', fontSize: 13, padding: '20px 0' }}>No cards available for trade.</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+        <div className="card-picker-grid">
           {cards.map((card) => {
             const sel = selected.has(card.id);
             return (
