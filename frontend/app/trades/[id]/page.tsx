@@ -426,7 +426,7 @@ export default function TradeDetailPage() {
                   onChange={(e) => setMsgInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') sendMessage(); }}
                 />
-                <button className="modal-confirm" style={{ padding: '8px 14px', fontSize: 13 }} onClick={sendMessage}>Send</button>
+                <button className="modal-confirm" style={{ padding: '8px 16px', fontSize: 13, flex: 'none', whiteSpace: 'nowrap' }} onClick={sendMessage}>Send</button>
               </div>
             )}
           </div>
