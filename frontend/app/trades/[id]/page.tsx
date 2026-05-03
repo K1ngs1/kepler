@@ -88,11 +88,14 @@ export default function TradeDetailPage() {
       };
 
       const loadItems = async () => {
-        const { data } = await supabase
-          .from('trade_items')
-          .select('id, direction, user_card_id, user_cards(condition, catalog_cards(name, set_name, number, image_url))')
-          .eq('trade_id', id);
-        if (data) setItems(data as TradeItem[]);
+        // Use the server-side API route which has service-key access,
+        // bypassing the user_cards RLS that hides other party's cards
+        // once for_trade is set to false after trade acceptance.
+        const res = await fetch(`/api/trade-items/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setItems(data as TradeItem[]);
+        }
       };
 
       const loadMessages = async () => {
