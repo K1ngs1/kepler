@@ -40,14 +40,91 @@ interface Trade {
   recipient_confirmed: boolean;
   created_at: string;
   updated_at: string;
-  initiator: { username: string | null } | null;
-  recipient: { username: string | null } | null;
+  initiator: { username: string | null; reputation_score: number | null } | null;
+  recipient: { username: string | null; reputation_score: number | null } | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
   proposed: 'Proposed', countered: 'Countered', accepted: 'Accepted',
   completed: 'Completed', cancelled: 'Cancelled',
 };
+
+const TIMELINE_STEPS = ['proposed', 'accepted', 'completed'];
+
+function TradeTimeline({ status }: { status: string }) {
+  if (status === 'cancelled') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20 }}>
+        <span className="trade-status-chip trade-status-cancelled" style={{ fontSize: 12 }}>Cancelled</span>
+        <span style={{ fontSize: 12, color: '#999' }}>This trade was cancelled.</span>
+      </div>
+    );
+  }
+  const currentIdx = TIMELINE_STEPS.indexOf(status === 'countered' ? 'proposed' : status);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 20 }}>
+      {TIMELINE_STEPS.map((step, i) => {
+        const done = i <= currentIdx;
+        const active = i === currentIdx;
+        return (
+          <div key={step} style={{ display: 'flex', alignItems: 'center', flex: i < TIMELINE_STEPS.length - 1 ? 1 : 'none' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <div style={{
+                width: 28, height: 28, borderRadius: '50%',
+                background: done ? '#111' : '#e5e5e5',
+                border: active ? '2.5px solid #111' : 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'background 0.2s',
+              }}>
+                {done && (
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="#fff" strokeWidth="2.2">
+                    <path d="M2.5 7l3.5 3.5 5.5-6" />
+                  </svg>
+                )}
+              </div>
+              <span style={{ fontSize: 10.5, color: done ? '#111' : '#aaa', fontWeight: done ? 600 : 400, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
+                {step}
+              </span>
+            </div>
+            {i < TIMELINE_STEPS.length - 1 && (
+              <div style={{ flex: 1, height: 2, background: i < currentIdx ? '#111' : '#e5e5e5', margin: '0 4px', marginBottom: 18, transition: 'background 0.2s' }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ReputationStars({ score }: { score: number | null }) {
+  if (!score) return null;
+  return (
+    <span style={{ fontSize: 11, color: '#e5a000', marginLeft: 4 }}>
+      {'★'.repeat(Math.round(score))}
+      <span style={{ color: '#ddd' }}>{'★'.repeat(5 - Math.round(score))}</span>
+    </span>
+  );
+}
+
+function StarRatingWidget({ onRate }: { onRate: (n: number) => void }) {
+  const [hover, setHover] = useState(0);
+  const [selected, setSelected] = useState(0);
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          onMouseEnter={() => setHover(n)}
+          onMouseLeave={() => setHover(0)}
+          onClick={() => { setSelected(n); onRate(n); }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: n <= (hover || selected) ? '#e5a000' : '#ddd', padding: '0 1px', lineHeight: 1 }}
+        >
+          ★
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function TradeDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -60,6 +137,7 @@ export default function TradeDetailPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [rated, setRated] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const showToast = (msg: string, ok = true) => {
@@ -81,16 +159,13 @@ export default function TradeDetailPage() {
       const loadTrade = async () => {
         const { data } = await supabase
           .from('trade_offers')
-          .select('*, initiator:profiles!trade_offers_initiator_id_fkey(username), recipient:profiles!trade_offers_recipient_id_fkey(username)')
+          .select('*, initiator:profiles!trade_offers_initiator_id_fkey(username, reputation_score), recipient:profiles!trade_offers_recipient_id_fkey(username, reputation_score)')
           .eq('id', id)
           .single();
         if (data) setTrade(data as Trade);
       };
 
       const loadItems = async () => {
-        // Use the server-side API route which has service-key access,
-        // bypassing the user_cards RLS that hides other party's cards
-        // once for_trade is set to false after trade acceptance.
         const res = await fetch(`/api/trade-items/${id}`);
         if (res.ok) {
           const data = await res.json();
@@ -108,7 +183,18 @@ export default function TradeDetailPage() {
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       };
 
-      await Promise.all([loadTrade(), loadItems(), loadMessages()]);
+      // check if current user already rated this trade
+      const checkRated = async () => {
+        const { data } = await supabase
+          .from('trade_ratings')
+          .select('id')
+          .eq('trade_id', id)
+          .eq('rater_id', user.id)
+          .maybeSingle();
+        if (data) setRated(true);
+      };
+
+      await Promise.all([loadTrade(), loadItems(), loadMessages(), checkRated()]);
       setLoading(false);
 
       tradeSub = supabase.channel(`trade-${id}`)
@@ -136,17 +222,24 @@ export default function TradeDetailPage() {
     accept_trade: 'Trade accepted!',
     cancel_trade: 'Trade cancelled.',
     complete_trade: 'Receipt confirmed!',
-    counter_offer: 'Counter offer sent!',
   };
 
-  const rpc = async (fn: string, args?: Record<string, unknown>) => {
+  const rpc = async (fn: string) => {
     setActionLoading(true);
     const supabase = createClient();
     if (!supabase) return;
-    const { error } = await supabase.rpc(fn, { p_trade_id: id, ...args });
+    const { error } = await supabase.rpc(fn, { p_trade_id: id });
     if (error) showToast(error.message, false);
     else showToast(RPC_LABELS[fn] ?? 'Done!');
     setActionLoading(false);
+  };
+
+  const handleRate = async (rating: number) => {
+    const supabase = createClient();
+    if (!supabase) return;
+    const { error } = await supabase.rpc('rate_trade', { p_trade_id: id, p_rating: rating });
+    if (error) showToast(error.message, false);
+    else { setRated(true); showToast('Rating submitted!'); }
   };
 
   if (loading) return (
@@ -168,9 +261,9 @@ export default function TradeDetailPage() {
   const isInitiator = trade.initiator_id === userId;
   const isRecipient = trade.recipient_id === userId;
   const partnerName = isInitiator ? (trade.recipient?.username ?? 'Unknown') : (trade.initiator?.username ?? 'Unknown');
+  const partnerRep = isInitiator ? trade.recipient?.reputation_score : trade.initiator?.reputation_score;
   const offered = items.filter((i) => i.direction === 'offer');
   const requested = items.filter((i) => i.direction === 'request');
-
   const myConfirmed = isInitiator ? trade.initiator_confirmed : trade.recipient_confirmed;
 
   return (
@@ -184,11 +277,16 @@ export default function TradeDetailPage() {
 
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px' }}>
         {/* Header */}
-        <div className="listing-toolbar" style={{ marginBottom: 24 }}>
+        <div className="listing-toolbar" style={{ marginBottom: 12 }}>
           <button onClick={() => router.push('/trades')} style={{ background: 'none', border: 'none', fontSize: 13, color: '#777', cursor: 'pointer', padding: 0 }}>← Trades</button>
-          <div className="listing-title" style={{ flex: 1 }}>Trade with {partnerName}</div>
-          <span className={`trade-status-chip trade-status-${trade.status}`}>{STATUS_LABELS[trade.status]}</span>
+          <div className="listing-title" style={{ flex: 1 }}>
+            Trade with {partnerName}
+            <ReputationStars score={partnerRep ?? null} />
+          </div>
         </div>
+
+        {/* Timeline */}
+        <TradeTimeline status={trade.status} />
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
           {/* Left: trade items + actions */}
@@ -210,10 +308,10 @@ export default function TradeDetailPage() {
                         {card?.image_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={card.image_url} alt={card.name} loading="lazy" style={{ maxHeight: 110, maxWidth: '85%', objectFit: 'contain' }} />
-                        ) : <div style={{ color: '#ccc', fontSize: 11 }}>No image</div>}
+                        ) : <div style={{ color: '#ccc', fontSize: 11 }}>{card ? 'No image' : 'Card unavailable'}</div>}
                       </div>
                       <div className="collection-card-body">
-                        <div className="collection-card-name">{card?.name ?? 'Unknown card'}</div>
+                        <div className="collection-card-name">{card?.name ?? 'Card no longer available'}</div>
                         <div className="collection-card-set">{card ? `${card.set_name} · #${card.number}` : '—'}</div>
                         <div style={{ fontSize: 11, color: '#888' }}>{item.user_cards?.condition ?? ''}</div>
                       </div>
@@ -237,10 +335,10 @@ export default function TradeDetailPage() {
                         {card?.image_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={card.image_url} alt={card.name} loading="lazy" style={{ maxHeight: 110, maxWidth: '85%', objectFit: 'contain' }} />
-                        ) : <div style={{ color: '#ccc', fontSize: 11 }}>No image</div>}
+                        ) : <div style={{ color: '#ccc', fontSize: 11 }}>{card ? 'No image' : 'Card unavailable'}</div>}
                       </div>
                       <div className="collection-card-body">
-                        <div className="collection-card-name">{card?.name ?? 'Unknown card'}</div>
+                        <div className="collection-card-name">{card?.name ?? 'Card no longer available'}</div>
                         <div className="collection-card-set">{card ? `${card.set_name} · #${card.number}` : '—'}</div>
                         <div style={{ fontSize: 11, color: '#888' }}>{item.user_cards?.condition ?? ''}</div>
                       </div>
@@ -258,7 +356,7 @@ export default function TradeDetailPage() {
                     Accept Trade
                   </button>
                 )}
-                {(isInitiator || isRecipient) && ['proposed', 'countered'].includes(trade.status) && (
+                {(isInitiator || isRecipient) && ['proposed', 'countered', 'accepted'].includes(trade.status) && (
                   <button className="btn-watchlist" style={{ flex: 1, fontSize: 13 }} disabled={actionLoading} onClick={() => rpc('cancel_trade')}>
                     Cancel
                   </button>
@@ -272,6 +370,23 @@ export default function TradeDetailPage() {
                   <div style={{ fontSize: 12.5, color: '#555', padding: '8px 0' }}>
                     Waiting for the other party to confirm receipt…
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* Star rating — shown when completed and user hasn't rated yet */}
+            {trade.status === 'completed' && (isInitiator || isRecipient) && (
+              <div style={{ marginTop: 24, padding: '16px', border: '1px solid #e5e5e5', borderRadius: 4 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: '#111' }}>
+                  Rate your experience with {partnerName}
+                </div>
+                {rated ? (
+                  <div style={{ fontSize: 12.5, color: '#3db56c', fontWeight: 600 }}>✓ Rating submitted — thanks!</div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>How was this trade? Your rating updates their reputation score.</div>
+                    <StarRatingWidget onRate={handleRate} />
+                  </>
                 )}
               </div>
             )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 export interface CatalogCard {
@@ -30,6 +30,25 @@ export default function CatalogClient({ cards }: Props) {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [added, setAdded] = useState<Set<string>>(new Set());
+  const [wished, setWished] = useState<Set<string>>(new Set());
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    if (!supabase) return;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return;
+      setUserId(data.user.id);
+      supabase
+        .from('user_cards')
+        .select('catalog_card_id')
+        .eq('user_id', data.user.id)
+        .eq('wanted', true)
+        .then(({ data: rows }) => {
+          if (rows) setWished(new Set(rows.map((r: any) => r.catalog_card_id)));
+        });
+    });
+  }, []);
 
   const sets = useMemo(() => {
     const s = new Set(cards.map((c) => c.set_name));
@@ -93,6 +112,36 @@ export default function CatalogClient({ cards }: Props) {
     setAddingCard(null);
   };
 
+  const toggleWishlist = async (card: CatalogCard) => {
+    const supabase = createClient();
+    if (!supabase || !userId) { showToast('Please log in to use your wishlist.', false); return; }
+    const isWished = wished.has(card.id);
+    // optimistic update
+    setWished((prev) => {
+      const next = new Set(prev);
+      isWished ? next.delete(card.id) : next.add(card.id);
+      return next;
+    });
+    if (isWished) {
+      await supabase.from('user_cards')
+        .update({ wanted: false })
+        .eq('user_id', userId)
+        .eq('catalog_card_id', card.id);
+      showToast(`${card.name} removed from wishlist.`);
+    } else {
+      const { error } = await supabase.from('user_cards').upsert(
+        { user_id: userId, catalog_card_id: card.id, condition: 'NM 7', quantity: 0, for_trade: false, wanted: true },
+        { onConflict: 'user_id,catalog_card_id,condition' }
+      );
+      if (error) {
+        setWished((prev) => { const next = new Set(prev); next.delete(card.id); return next; });
+        showToast('Could not add to wishlist.', false);
+      } else {
+        showToast(`${card.name} added to wishlist!`);
+      }
+    }
+  };
+
   if (cards.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '80px 0' }}>
@@ -151,6 +200,14 @@ export default function CatalogClient({ cards }: Props) {
       <div className="catalog-grid">
         {filtered.map((card) => (
           <div key={card.id} className="catalog-card" style={{ position: 'relative' }}>
+            {/* Wishlist heart button */}
+            <button
+              className={`catalog-wish-btn${wished.has(card.id) ? ' active' : ''}`}
+              onClick={(e) => { e.stopPropagation(); toggleWishlist(card); }}
+              title={wished.has(card.id) ? 'Remove from wishlist' : 'Add to wishlist'}
+            >
+              {wished.has(card.id) ? '♥' : '♡'}
+            </button>
             <a href={`/catalog/${card.id}`} style={{ display: 'block', textDecoration: 'none' }}>
               <div className="catalog-card-img">
                 {card.image_url ? (

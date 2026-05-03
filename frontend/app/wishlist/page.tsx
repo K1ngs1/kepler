@@ -20,9 +20,22 @@ interface WishCard {
 interface Match {
   user_id: string;
   username: string | null;
+  reputation_score: number | null;
+  completed_trades: number;
   card_name: string;
   card_id: string;
   user_card_id: string;
+}
+
+function StarDisplay({ score }: { score: number | null }) {
+  if (!score || score === 0) return <span style={{ fontSize: 11, color: '#bbb' }}>No rating</span>;
+  return (
+    <span style={{ fontSize: 11, color: '#888', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+      <span style={{ color: '#e5a000' }}>{'★'.repeat(Math.round(score))}</span>
+      <span style={{ color: '#ddd' }}>{'★'.repeat(5 - Math.round(score))}</span>
+      <span style={{ marginLeft: 3, color: '#888' }}>{score}/5</span>
+    </span>
+  );
 }
 
 export default function WishlistPage() {
@@ -48,20 +61,32 @@ export default function WishlistPage() {
       const cards = (wished as WishCard[]) ?? [];
       setWishlist(cards);
 
-      // find other users who have those cards for trade
       if (cards.length > 0) {
         const catalogIds = cards.map((c) => c.catalog_cards.id);
         const { data: tradeCards } = await supabase
           .from('user_cards')
-          .select('id, user_id, catalog_card_id, catalog_cards(name), profiles(username)')
+          .select('id, user_id, catalog_card_id, catalog_cards(name), profiles(username, reputation_score)')
           .in('catalog_card_id', catalogIds)
           .eq('for_trade', true)
           .neq('user_id', user.id);
 
         if (tradeCards) {
+          const userIds = [...new Set(tradeCards.map((r: any) => r.user_id))];
+          const completedCounts: Record<string, number> = {};
+          for (const uid of userIds) {
+            const { count } = await supabase
+              .from('trade_offers')
+              .select('id', { count: 'exact', head: true })
+              .eq('status', 'completed')
+              .or(`initiator_id.eq.${uid},recipient_id.eq.${uid}`);
+            completedCounts[uid] = count ?? 0;
+          }
+
           setMatches(tradeCards.map((r: any) => ({
             user_id: r.user_id,
             username: r.profiles?.username ?? 'Anonymous',
+            reputation_score: r.profiles?.reputation_score ?? null,
+            completed_trades: completedCounts[r.user_id] ?? 0,
             card_name: r.catalog_cards?.name ?? '',
             card_id: r.catalog_card_id,
             user_card_id: r.id,
@@ -141,6 +166,8 @@ export default function WishlistPage() {
                   <thead>
                     <tr>
                       <th>User</th>
+                      <th>Reputation</th>
+                      <th>Completed Trades</th>
                       <th>Card Available</th>
                       <th></th>
                     </tr>
@@ -149,6 +176,8 @@ export default function WishlistPage() {
                     {matches.map((m) => (
                       <tr key={m.user_card_id}>
                         <td style={{ fontWeight: 600 }}>{m.username}</td>
+                        <td><StarDisplay score={m.reputation_score} /></td>
+                        <td style={{ color: '#777', fontSize: 12.5 }}>{m.completed_trades} trade{m.completed_trades !== 1 ? 's' : ''}</td>
                         <td>{m.card_name}</td>
                         <td>
                           <a

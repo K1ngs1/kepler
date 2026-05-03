@@ -281,6 +281,14 @@ input, select { font-family: inherit; }
 .trade-status-completed { background: #d4edda; color: #155724; }
 .trade-status-cancelled { background: #f8d7da; color: #721c24; }
 
+/* ── NAV BADGE ── */
+.nav-badge { position: absolute; top: 2px; right: 2px; background: #c0392b; color: #fff; font-size: 9px; font-weight: 700; border-radius: 999px; min-width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; padding: 0 4px; pointer-events: none; }
+
+/* ── CATALOG WISHLIST BUTTON ── */
+.catalog-wish-btn { position: absolute; top: 7px; right: 7px; z-index: 10; background: rgba(255,255,255,0.88); border: none; border-radius: 50%; width: 28px; height: 28px; font-size: 15px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #bbb; transition: color 0.12s, background 0.12s; padding: 0; line-height: 1; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+.catalog-wish-btn:hover { color: #888; background: #fff; }
+.catalog-wish-btn.active { color: #c0392b; background: #fff; }
+
 /* ── AUTH PAGE ── */
 .auth-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f7f7f7; }
 .auth-box { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 40px 36px; width: 400px; max-width: 95vw; }

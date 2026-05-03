@@ -14,12 +14,12 @@ export default function Nav({ user: initialUser }: NavProps) {
   const pathname = usePathname();
   const [loginOpen, setLoginOpen] = useState(false);
   const [user, setUser] = useState(initialUser ?? null);
+  const [unreadTrades, setUnreadTrades] = useState(0);
 
   useEffect(() => {
     const supabase = createClient();
     if (!supabase) return;
 
-    // Read current session on mount
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
         const name = data.user.user_metadata?.full_name
@@ -27,10 +27,10 @@ export default function Nav({ user: initialUser }: NavProps) {
           || data.user.email?.split('@')[0]
           || '';
         setUser({ name, email: data.user.email ?? '' });
+        fetchUnread(data.user.id);
       }
     });
 
-    // Keep nav in sync with auth changes (login/logout from any tab)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         const name = session.user.user_metadata?.full_name
@@ -38,10 +38,22 @@ export default function Nav({ user: initialUser }: NavProps) {
           || session.user.email?.split('@')[0]
           || '';
         setUser({ name, email: session.user.email ?? '' });
+        fetchUnread(session.user.id);
       } else {
         setUser(null);
+        setUnreadTrades(0);
       }
     });
+
+    async function fetchUnread(uid: string) {
+      if (!supabase) return;
+      const { count } = await supabase
+        .from('trade_offers')
+        .select('id', { count: 'exact', head: true })
+        .eq('recipient_id', uid)
+        .in('status', ['proposed', 'countered']);
+      setUnreadTrades(count ?? 0);
+    }
 
     return () => subscription.unsubscribe();
   }, []);
@@ -50,6 +62,7 @@ export default function Nav({ user: initialUser }: NavProps) {
     const supabase = createClient();
     if (supabase) await supabase.auth.signOut();
     setUser(null);
+    setUnreadTrades(0);
   };
 
   return (
@@ -73,8 +86,11 @@ export default function Nav({ user: initialUser }: NavProps) {
           <Link href="/collection" className={`nav-item${pathname === '/collection' ? ' active' : ''}`}>
             My Collection
           </Link>
-          <Link href="/trades" className={`nav-item${pathname?.startsWith('/trades') ? ' active' : ''}`}>
+          <Link href="/trades" className={`nav-item${pathname?.startsWith('/trades') ? ' active' : ''}`} style={{ position: 'relative' }}>
             Trades
+            {unreadTrades > 0 && (
+              <span className="nav-badge">{unreadTrades > 9 ? '9+' : unreadTrades}</span>
+            )}
           </Link>
           <Link href="/wishlist" className={`nav-item${pathname === '/wishlist' ? ' active' : ''}`}>
             Wishlist

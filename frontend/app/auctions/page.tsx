@@ -20,7 +20,17 @@ interface ForTradeCard {
     rarity: string | null;
     image_url: string | null;
   };
-  profiles: { username: string | null } | null;
+  profiles: { username: string | null; reputation_score: number | null } | null;
+}
+
+function StarDisplay({ score }: { score: number | null }) {
+  if (!score || score === 0) return null;
+  return (
+    <span style={{ fontSize: 11, color: '#888', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+      {'★'.repeat(Math.round(score))}{'☆'.repeat(5 - Math.round(score))}
+      <span style={{ marginLeft: 2 }}>{score}</span>
+    </span>
+  );
 }
 
 export default function AuctionsPage() {
@@ -30,7 +40,7 @@ export default function AuctionsPage() {
   const [selectedSet, setSelectedSet] = useState('');
   const [selectedCondition, setSelectedCondition] = useState('');
   const [viewMode, setViewMode] = useState('grid');
-  const [sortBy, setSortBy] = useState('name-asc');
+  const [sortBy, setSortBy] = useState('reputation');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [yearOpen, setYearOpen] = useState(true);
   const [gradeOpen, setGradeOpen] = useState(true);
@@ -49,7 +59,7 @@ export default function AuctionsPage() {
 
       const { data } = await supabase
         .from('user_cards')
-        .select('id, condition, quantity, user_id, catalog_cards(id, name, set_name, set_code, number, rarity, image_url), profiles(username)')
+        .select('id, condition, quantity, user_id, catalog_cards(id, name, set_name, set_code, number, rarity, image_url), profiles(username, reputation_score)')
         .eq('for_trade', true)
         .order('created_at', { ascending: false })
         .limit(200);
@@ -59,17 +69,23 @@ export default function AuctionsPage() {
     })();
   }, []);
 
-  const sets = Array.from(new Set(cards.map((c) => c.catalog_cards.set_name))).sort();
+  const sets = Array.from(new Set(cards.map((c) => c.catalog_cards?.set_name).filter(Boolean))).sort() as string[];
   const conditions = Array.from(new Set(cards.map((c) => c.condition))).sort();
 
   const sorted = [...cards].sort((a, b) => {
-    if (sortBy === 'name-asc') return a.catalog_cards.name.localeCompare(b.catalog_cards.name);
-    if (sortBy === 'name-desc') return b.catalog_cards.name.localeCompare(a.catalog_cards.name);
-    if (sortBy === 'set') return a.catalog_cards.set_name.localeCompare(b.catalog_cards.set_name);
+    if (sortBy === 'reputation') {
+      const ra = a.profiles?.reputation_score ?? 0;
+      const rb = b.profiles?.reputation_score ?? 0;
+      return rb - ra;
+    }
+    if (sortBy === 'name-asc') return (a.catalog_cards?.name ?? '').localeCompare(b.catalog_cards?.name ?? '');
+    if (sortBy === 'name-desc') return (b.catalog_cards?.name ?? '').localeCompare(a.catalog_cards?.name ?? '');
+    if (sortBy === 'set') return (a.catalog_cards?.set_name ?? '').localeCompare(b.catalog_cards?.set_name ?? '');
     return 0;
   });
 
   const filtered = sorted.filter((c) => {
+    if (!c.catalog_cards) return false;
     const q = search.toLowerCase();
     if (q && !c.catalog_cards.name.toLowerCase().includes(q) &&
         !c.catalog_cards.set_name.toLowerCase().includes(q) &&
@@ -130,7 +146,7 @@ export default function AuctionsPage() {
                   checked={selectedSet === s}
                   onChange={() => setSelectedSet(s)}
                 />
-                <span style={{ fontSize: 12 }}>{s || 'All Sets'} {s && <span className="sidebar-item-count">({cards.filter((c) => c.catalog_cards.set_name === s).length})</span>}</span>
+                <span style={{ fontSize: 12 }}>{s || 'All Sets'} {s && <span className="sidebar-item-count">({cards.filter((c) => c.catalog_cards?.set_name === s).length})</span>}</span>
               </label>
             ))}
           </div>
@@ -175,6 +191,7 @@ export default function AuctionsPage() {
               </button>
             </div>
             <select className="toolbar-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+              <option value="reputation">Top Rated</option>
               <option value="name-asc">Name: A–Z</option>
               <option value="name-desc">Name: Z–A</option>
               <option value="set">By Set</option>
@@ -222,18 +239,21 @@ export default function AuctionsPage() {
                   <tr key={card.id}>
                     <td style={{ fontWeight: 600 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        {card.catalog_cards.image_url && (
+                        {card.catalog_cards?.image_url && (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={card.catalog_cards.image_url} alt={card.catalog_cards.name} style={{ height: 36, width: 'auto', objectFit: 'contain' }} loading="lazy" />
                         )}
-                        <a href={`/catalog/${card.catalog_cards.id}`} style={{ color: '#111', textDecoration: 'none' }}>
-                          {card.catalog_cards.name}
+                        <a href={`/catalog/${card.catalog_cards?.id}`} style={{ color: '#111', textDecoration: 'none' }}>
+                          {card.catalog_cards?.name ?? 'Unknown'}
                         </a>
                       </div>
                     </td>
-                    <td style={{ color: '#777', fontSize: 12.5 }}>{card.catalog_cards.set_name} · #{card.catalog_cards.number}</td>
+                    <td style={{ color: '#777', fontSize: 12.5 }}>{card.catalog_cards?.set_name ?? '—'} · #{card.catalog_cards?.number ?? '—'}</td>
                     <td style={{ color: '#777', fontSize: 12.5 }}>{card.condition}</td>
-                    <td style={{ color: '#555', fontSize: 12.5 }}>{card.profiles?.username ?? 'Anonymous'}</td>
+                    <td style={{ color: '#555', fontSize: 12.5 }}>
+                      <div>{card.profiles?.username ?? 'Anonymous'}</div>
+                      <StarDisplay score={card.profiles?.reputation_score ?? null} />
+                    </td>
                     <td>
                       {isOwn(card) ? (
                         <span style={{ fontSize: 12, color: '#999' }}>Your card</span>
@@ -262,7 +282,7 @@ export default function AuctionsPage() {
               {filtered.map((card) => (
                 <div key={card.id} className="lot-card">
                   <div className="lot-card-img" style={{ position: 'relative' }}>
-                    {card.catalog_cards.image_url ? (
+                    {card.catalog_cards?.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={card.catalog_cards.image_url}
@@ -272,26 +292,31 @@ export default function AuctionsPage() {
                       />
                     ) : (
                       <div style={{ color: '#ccc', fontSize: 12, textAlign: 'center', padding: '0 8px' }}>
-                        {card.catalog_cards.name}
+                        {card.catalog_cards?.name ?? 'Unknown'}
                       </div>
                     )}
                   </div>
                   <div className="lot-body">
                     <div className="lot-num" style={{ fontSize: 11, color: '#888' }}>
-                      {card.catalog_cards.set_name} · #{card.catalog_cards.number}
+                      {card.catalog_cards?.set_name ?? '—'} · #{card.catalog_cards?.number ?? '—'}
                     </div>
                     <div className="lot-title">
-                      <a href={`/catalog/${card.catalog_cards.id}`} style={{ color: '#111', textDecoration: 'none' }}>
-                        {card.catalog_cards.name}
+                      <a href={`/catalog/${card.catalog_cards?.id}`} style={{ color: '#111', textDecoration: 'none' }}>
+                        {card.catalog_cards?.name ?? 'Unknown'}
                       </a>
                     </div>
                     <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>
                       Condition: <strong>{card.condition}</strong>
                     </div>
-                    <div style={{ fontSize: 12, color: '#777', marginBottom: 10 }}>
+                    <div style={{ fontSize: 12, color: '#777', marginBottom: 4 }}>
                       Owner: <span style={{ fontWeight: 600, color: '#333' }}>{card.profiles?.username ?? 'Anonymous'}</span>
                     </div>
-                    {card.catalog_cards.rarity && (
+                    {card.profiles?.reputation_score ? (
+                      <div style={{ marginBottom: 6 }}>
+                        <StarDisplay score={card.profiles.reputation_score} />
+                      </div>
+                    ) : null}
+                    {card.catalog_cards?.rarity && (
                       <div className="catalog-card-rarity" style={{ marginBottom: 10 }}>
                         {card.catalog_cards.rarity}
                       </div>
@@ -337,7 +362,6 @@ export default function AuctionsPage() {
           onSuccess={(u) => {
             setLoginOpen(false);
             setAuthed(true);
-            // Re-fetch user id after login
             const supabase = createClient();
             if (supabase) {
               supabase.auth.getUser().then(({ data }) => {
