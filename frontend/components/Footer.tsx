@@ -32,8 +32,8 @@ export default function Footer() {
           <div className="footer-col-title">Company</div>
           <div className="footer-links">
             <a>About Kepler</a>
+            <Link href="/analytics">Analytics</Link>
             <a>Careers</a>
-            <a>Press</a>
             <a>Contact</a>
           </div>
         </div>

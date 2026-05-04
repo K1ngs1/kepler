@@ -20,7 +20,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from('trade_items')
-    .select('id, direction, user_card_id, user_cards(condition, catalog_cards(name, set_name, number, image_url))')
+    .select('id, direction, user_card_id, user_cards(condition, photo_url, catalog_card_id, catalog_cards(name, set_name, number, image_url))')
     .eq('trade_id', params.tradeId);
 
   if (error) {

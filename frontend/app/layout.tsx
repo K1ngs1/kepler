@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, Libre_Baskerville } from 'next/font/google';
+import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import './globals.css';
 
 const inter = Inter({
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${inter.variable} ${libreBaskerville.variable}`}>
+        <KeyboardShortcuts />
         {children}
       </body>
     </html>

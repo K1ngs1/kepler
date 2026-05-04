@@ -1,15 +1,19 @@
 'use client';
 
-import { useState, useEffect, Suspense, useCallback } from 'react';
+import { useState, useEffect, Suspense, useCallback, useMemo } from 'react';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
+import PriceBadge from '@/components/PriceBadge';
+import TradeValueSummary from '@/components/TradeValueSummary';
 import { createClient } from '@/lib/supabase/client';
+import { usePrices } from '@/lib/usePrices';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 interface UserCard {
   id: string;
   condition: string;
   quantity: number;
+  catalog_card_id: string;
   catalog_cards: {
     name: string;
     set_name: string;
@@ -29,9 +33,10 @@ interface CardPickerProps {
   selected: Set<string>;
   onToggle: (id: string) => void;
   label: string;
+  prices?: Record<string, number>;
 }
 
-function CardPicker({ cards, selected, onToggle, label }: CardPickerProps) {
+function CardPicker({ cards, selected, onToggle, label, prices = {} }: CardPickerProps) {
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#555', marginBottom: 12 }}>
@@ -76,6 +81,7 @@ function CardPicker({ cards, selected, onToggle, label }: CardPickerProps) {
                     {card.catalog_cards.set_name} · #{card.catalog_cards.number}
                   </div>
                   <div style={{ fontSize: 10.5, color: '#777', marginTop: 2 }}>{card.condition}</div>
+                  <PriceBadge price={prices[card.catalog_card_id]} />
                   {sel && (
                     <div style={{ fontSize: 10.5, fontWeight: 700, color: '#111', marginTop: 4 }}>✓ Selected</div>
                   )}
@@ -139,7 +145,7 @@ function NewTradeForm() {
       const [myRes, recipientRes] = await Promise.all([
         supabase
           .from('user_cards')
-          .select('id, condition, quantity, catalog_cards(name, set_name, number, image_url)')
+          .select('id, condition, quantity, catalog_card_id, catalog_cards(name, set_name, number, image_url)')
           .eq('user_id', user.id)
           .eq('for_trade', true),
         withUserId
@@ -153,7 +159,7 @@ function NewTradeForm() {
       if (withUserId) {
         const { data: theirRes } = await supabase
           .from('user_cards')
-          .select('id, condition, quantity, catalog_cards(name, set_name, number, image_url)')
+          .select('id, condition, quantity, catalog_card_id, catalog_cards(name, set_name, number, image_url)')
           .eq('user_id', withUserId)
           .eq('for_trade', true);
         setTheirCards((theirRes as UserCard[]) ?? []);
@@ -208,6 +214,15 @@ function NewTradeForm() {
       setSubmitting(false);
     }
   };
+
+  // Price estimation
+  const allCatalogIds = useMemo(() =>
+    [...myCards, ...theirCards].map((c) => c.catalog_card_id),
+    [myCards, theirCards]
+  );
+  const prices = usePrices(allCatalogIds);
+  const offerTotal = myCards.filter((c) => offered.has(c.id)).reduce((s, c) => s + (prices[c.catalog_card_id] ?? 0), 0);
+  const requestTotal = theirCards.filter((c) => requested.has(c.id)).reduce((s, c) => s + (prices[c.catalog_card_id] ?? 0), 0);
 
   const canSubmit = !submitting && !!withUserId && offered.size > 0 && requested.size > 0;
 
@@ -276,14 +291,19 @@ function NewTradeForm() {
                 selected={offered}
                 onToggle={toggleOffered}
                 label={`Your cards to offer (${offered.size} selected)`}
+                prices={prices}
               />
               <CardPicker
                 cards={theirCards}
                 selected={requested}
                 onToggle={toggleRequested}
                 label={`Their cards to request (${requested.size} selected)`}
+                prices={prices}
               />
             </div>
+
+            {/* Trade value summary */}
+            <TradeValueSummary offerTotal={offerTotal} requestTotal={requestTotal} />
 
             {myCards.length === 0 && (
               <div style={{ marginBottom: 20, fontSize: 13, color: '#888' }}>

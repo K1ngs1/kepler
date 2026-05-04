@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
+import CardImage from '@/components/CardImage';
+import PriceBadge from '@/components/PriceBadge';
+import TradeValueSummary from '@/components/TradeValueSummary';
 import { createClient } from '@/lib/supabase/client';
+import { usePrices } from '@/lib/usePrices';
 import { useParams, useRouter } from 'next/navigation';
 
 interface CardInfo {
@@ -19,6 +23,8 @@ interface TradeItem {
   user_card_id: string;
   user_cards: {
     condition: string;
+    photo_url: string | null;
+    catalog_card_id: string;
     catalog_cards: CardInfo | null;
   } | null;
 }
@@ -266,6 +272,15 @@ export default function TradeDetailPage() {
   const requested = items.filter((i) => i.direction === 'request');
   const myConfirmed = isInitiator ? trade.initiator_confirmed : trade.recipient_confirmed;
 
+  // Price estimation
+  const catalogIds = useMemo(() =>
+    items.filter((i) => i.user_cards?.catalog_card_id).map((i) => i.user_cards!.catalog_card_id),
+    [items]
+  );
+  const prices = usePrices(catalogIds);
+  const offerTotal = offered.reduce((sum, i) => sum + (prices[i.user_cards?.catalog_card_id ?? ''] ?? 0), 0);
+  const requestTotal = requested.reduce((sum, i) => sum + (prices[i.user_cards?.catalog_card_id ?? ''] ?? 0), 0);
+
   return (
     <>
       <Nav />
@@ -302,18 +317,25 @@ export default function TradeDetailPage() {
                   <div style={{ color: '#ccc', fontSize: 12 }}>No cards</div>
                 ) : offered.map((item) => {
                   const card = item.user_cards?.catalog_cards;
+                  const photoUrl = item.user_cards?.photo_url ?? null;
                   return (
                     <div key={item.id} className="collection-card" style={{ marginBottom: 10 }}>
                       <div className="collection-card-img">
-                        {card?.image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={card.image_url} alt={card.name} loading="lazy" style={{ maxHeight: 110, maxWidth: '85%', objectFit: 'contain' }} />
-                        ) : <div style={{ color: '#ccc', fontSize: 11 }}>{card ? 'No image' : 'Card unavailable'}</div>}
+                        <CardImage
+                          officialUrl={card?.image_url ?? null}
+                          photoUrl={photoUrl}
+                          alt={card?.name ?? 'Card'}
+                          maxHeight={110}
+                          maxWidth="85%"
+                        />
                       </div>
                       <div className="collection-card-body">
                         <div className="collection-card-name">{card?.name ?? 'Card no longer available'}</div>
                         <div className="collection-card-set">{card ? `${card.set_name} · #${card.number}` : '—'}</div>
-                        <div style={{ fontSize: 11, color: '#888' }}>{item.user_cards?.condition ?? ''}</div>
+                        <div style={{ fontSize: 11, color: '#888', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                          {item.user_cards?.condition ?? ''}
+                          <PriceBadge price={prices[item.user_cards?.catalog_card_id ?? '']} />
+                        </div>
                       </div>
                     </div>
                   );
@@ -329,24 +351,39 @@ export default function TradeDetailPage() {
                   <div style={{ color: '#ccc', fontSize: 12 }}>No cards</div>
                 ) : requested.map((item) => {
                   const card = item.user_cards?.catalog_cards;
+                  const photoUrl = item.user_cards?.photo_url ?? null;
                   return (
                     <div key={item.id} className="collection-card" style={{ marginBottom: 10 }}>
                       <div className="collection-card-img">
-                        {card?.image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={card.image_url} alt={card.name} loading="lazy" style={{ maxHeight: 110, maxWidth: '85%', objectFit: 'contain' }} />
-                        ) : <div style={{ color: '#ccc', fontSize: 11 }}>{card ? 'No image' : 'Card unavailable'}</div>}
+                        <CardImage
+                          officialUrl={card?.image_url ?? null}
+                          photoUrl={photoUrl}
+                          alt={card?.name ?? 'Card'}
+                          maxHeight={110}
+                          maxWidth="85%"
+                        />
                       </div>
                       <div className="collection-card-body">
                         <div className="collection-card-name">{card?.name ?? 'Card no longer available'}</div>
                         <div className="collection-card-set">{card ? `${card.set_name} · #${card.number}` : '—'}</div>
-                        <div style={{ fontSize: 11, color: '#888' }}>{item.user_cards?.condition ?? ''}</div>
+                        <div style={{ fontSize: 11, color: '#888', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                          {item.user_cards?.condition ?? ''}
+                          <PriceBadge price={prices[item.user_cards?.catalog_card_id ?? '']} />
+                        </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
             </div>
+
+            {/* Trade value summary */}
+            <TradeValueSummary
+              offerTotal={offerTotal}
+              requestTotal={requestTotal}
+              offerLabel={isInitiator ? 'Your offer' : `${trade.initiator?.username ?? 'Their'} offer`}
+              requestLabel={isInitiator ? 'Your request' : `${trade.recipient?.username ?? 'Their'} request`}
+            />
 
             {/* Action buttons */}
             {trade.status !== 'completed' && trade.status !== 'cancelled' && (

@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
+import CardImage from '@/components/CardImage';
 import { createClient } from '@/lib/supabase/client';
 
 interface WishCard {
   id: string;
+  photo_url: string | null;
   catalog_cards: {
     id: string;
     name: string;
@@ -54,7 +56,7 @@ export default function WishlistPage() {
 
       const { data: wished } = await supabase
         .from('user_cards')
-        .select('id, catalog_cards(id, name, set_name, number, rarity, image_url)')
+        .select('id, photo_url, catalog_cards(id, name, set_name, number, rarity, image_url)')
         .eq('user_id', user.id)
         .eq('wanted', true);
 
@@ -138,12 +140,11 @@ export default function WishlistPage() {
               {wishlist.map((card) => (
                 <div key={card.id} className="collection-card">
                   <div className="collection-card-img">
-                    {card.catalog_cards.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={card.catalog_cards.image_url} alt={card.catalog_cards.name} loading="lazy" style={{ maxHeight: 130, maxWidth: '90%', objectFit: 'contain' }} />
-                    ) : (
-                      <div style={{ color: '#ccc', fontSize: 11 }}>No image</div>
-                    )}
+                    <CardImage
+                      officialUrl={card.catalog_cards.image_url}
+                      photoUrl={card.photo_url}
+                      alt={card.catalog_cards.name}
+                    />
                   </div>
                   <div className="collection-card-body">
                     <div className="collection-card-name">{card.catalog_cards.name}</div>

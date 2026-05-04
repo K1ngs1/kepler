@@ -11,6 +11,13 @@ A production-ready peer-to-peer trading platform for graded Pokémon TCG cards, 
 - Real-time trade chat powered by Supabase Realtime
 - Wishlist matching — see who has the cards you want
 - Google OAuth and email/password authentication
+- **Photo Upload** — upload your own card photos to show alongside official art
+- **Trade Value Estimator** — see estimated market values and fairness comparison during trades
+- **Email Notifications** — get notified via email for new trade offers and messages (Resend + Supabase Edge Functions)
+- **Trade Binder Export** — share your tradeable cards as an image or public link (`/binder/<username>`)
+- **Keyboard Shortcuts** — `/` to search, `Ctrl+K` for command palette, `Esc` to close modals, bulk select in collection
+- **Analytics Dashboard** — platform-wide stats at `/analytics` showing most wanted and most traded cards
+- **Playwright E2E Tests** — full trade flow test suite
 
 ## Tech Stack
 
@@ -49,10 +56,14 @@ SUPABASE_SERVICE_KEY=your-service-role-key
 
 ### 3. Apply database migrations
 
-Run both migration files in your Supabase SQL Editor:
+Run all migration files in order in your Supabase SQL Editor:
 
 1. `supabase/migrations/001_schema.sql` — tables, RLS policies, auth trigger
 2. `supabase/migrations/002_trade_functions.sql` — trade functions and messages table
+3. `supabase/migrations/003_reputation_cancel.sql` — reputation system and cancel fix
+4. `supabase/migrations/004_card_photos.sql` — photo_url column on user_cards
+5. `supabase/migrations/005_card_prices.sql` — card_prices table for trade value estimates
+6. `supabase/migrations/006_email_notifications.sql` — email_notifications preference on profiles
 
 ### 4. Seed the card catalog
 
@@ -122,6 +133,56 @@ kepler/
 ## Backup & Recovery
 
 See [`supabase/backup-guide.md`](supabase/backup-guide.md) for Point-In-Time Recovery setup and manual backup instructions.
+
+---
+
+## New Feature Setup
+
+### Card Photos
+
+1. Create a storage bucket called `card-photos` in Supabase Dashboard > Storage
+2. Set it to **public** with a 512KB file size limit
+3. Apply the RLS policies described in `supabase/migrations/004_card_photos.sql`
+
+### Card Prices (Trade Value Estimator)
+
+```bash
+export SUPABASE_SERVICE_KEY=your-service-role-key
+node scripts/seed-prices.mjs
+```
+
+### Email Notifications
+
+1. Sign up for [Resend](https://resend.com) (free tier: 100 emails/day)
+2. Set the `RESEND_API_KEY` environment variable in Supabase Edge Functions
+3. Deploy the edge function: `supabase functions deploy send-trade-email`
+4. Create Database Webhooks in Supabase Dashboard for:
+   - `trade_offers` INSERT → call `send-trade-email`
+   - `trade_messages` INSERT → call `send-trade-email`
+
+### Running E2E Tests
+
+```bash
+cd frontend
+npx playwright install chromium   # first time only
+npm run test:e2e
+```
+
+Optional environment variables for test accounts:
+```bash
+TEST_USER1_EMAIL=user1@test.com
+TEST_USER1_PASSWORD=password1
+TEST_USER2_EMAIL=user2@test.com
+TEST_USER2_PASSWORD=password2
+```
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `/` | Focus search bar |
+| `Ctrl+K` / `Cmd+K` | Open command palette |
+| `Esc` | Close any modal or palette |
 
 ---
 
