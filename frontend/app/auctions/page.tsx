@@ -64,7 +64,7 @@ export default function AuctionsPage() {
         .order('created_at', { ascending: false })
         .limit(200);
 
-      setCards((data as ForTradeCard[]) ?? []);
+      setCards((data as unknown as ForTradeCard[]) ?? []);
       setLoading(false);
     })();
   }, []);

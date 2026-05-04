@@ -60,7 +60,7 @@ export default function WishlistPage() {
         .eq('user_id', user.id)
         .eq('wanted', true);
 
-      const cards = (wished as WishCard[]) ?? [];
+      const cards = (wished as unknown as WishCard[]) ?? [];
       setWishlist(cards);
 
       if (cards.length > 0) {
@@ -73,7 +73,7 @@ export default function WishlistPage() {
           .neq('user_id', user.id);
 
         if (tradeCards) {
-          const userIds = [...new Set(tradeCards.map((r: any) => r.user_id))];
+          const userIds = Array.from(new Set(tradeCards.map((r: any) => r.user_id)));
           const completedCounts: Record<string, number> = {};
           for (const uid of userIds) {
             const { count } = await supabase
@@ -131,7 +131,7 @@ export default function WishlistPage() {
           <div style={{ textAlign: 'center', padding: '80px 0' }}>
             <div style={{ fontSize: 32, marginBottom: 14 }}>⭐</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#333', marginBottom: 8 }}>Your wishlist is empty</div>
-            <div style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>Mark cards as "Wanted" in your collection to add them here.</div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>Mark cards as &ldquo;Wanted&rdquo; in your collection to add them here.</div>
             <a href="/collection" style={{ background: '#111', color: '#fff', borderRadius: 5, padding: '10px 24px', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>Go to Collection</a>
           </div>
         ) : (

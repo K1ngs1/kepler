@@ -1,0 +1,3 @@
+# Mark legacy backend as vendored so GitHub linguist
+# reports the actual tech stack (TypeScript / Next.js)
+backend/* linguist-vendored

@@ -105,7 +105,7 @@ export default function CatalogClient({ cards }: Props) {
     if (error) {
       showToast('Could not add card — ' + error.message, false);
     } else {
-      setAdded((s) => new Set([...s, addingCard.id]));
+      setAdded((s) => { const next = new Set(s); next.add(addingCard.id); return next; });
       showToast(`${addingCard.name} added to your collection!`);
     }
     setSubmitting(false);

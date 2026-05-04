@@ -47,7 +47,7 @@ export default function TradeCardDetailPage() {
       ]);
 
       if (user) { setAuthed(true); setCurrentUserId(user.id); }
-      if (data) setCard(data as ForTradeCard);
+      if (data) setCard(data as unknown as ForTradeCard);
       setLoading(false);
     })();
   }, [id]);

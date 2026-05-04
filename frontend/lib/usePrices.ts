@@ -12,7 +12,7 @@ export function usePrices(catalogCardIds: string[]): Record<string, number> {
     const supabase = createClient();
     if (!supabase) return;
 
-    const uniqueIds = [...new Set(catalogCardIds)];
+    const uniqueIds = Array.from(new Set(catalogCardIds));
 
     supabase
       .from('card_prices')

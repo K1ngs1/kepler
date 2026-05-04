@@ -41,6 +41,6 @@ build = ["npm", "--prefix", "frontend", "run", "build"]
 
 [userenv]
 
-[userenv.shared]
-NEXT_PUBLIC_SUPABASE_URL = "https://yquwasetajootlgmyxan.supabase.co"
-NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxdXdhc2V0YWpvb3RsZ215eGFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3NDAzNDgsImV4cCI6MjA5MzMxNjM0OH0.0ZOXSgvHbsAnD-HyZxbVITDxm4JEKnqe_cg39lHKztg"
+# Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+# in Replit's Secrets tab (lock icon in sidebar).
+# Do NOT hardcode credentials here — they will be committed to version control.

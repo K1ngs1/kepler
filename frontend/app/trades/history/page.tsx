@@ -43,7 +43,7 @@ export default function TradeHistoryPage() {
         .in('status', ['completed', 'cancelled'])
         .order('updated_at', { ascending: false });
 
-      setTrades((data as Trade[]) ?? []);
+      setTrades((data as unknown as Trade[]) ?? []);
       setLoading(false);
     });
   }, []);

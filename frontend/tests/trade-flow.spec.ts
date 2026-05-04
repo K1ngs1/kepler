@@ -177,6 +177,129 @@ test.describe('Kepler Trade Flow', () => {
       await expect(page1.locator('.listing-title', { hasText: 'My Collection' })).toBeVisible({ timeout: 5000 });
     });
 
+    // ─── Step 7b: User 1 proposes a trade to User 2 ───
+    await test.step('User 1 proposes a trade', async () => {
+      await page1.goto('/auctions');
+      await page1.waitForSelector('.lot-card, .trades-table', { timeout: 10000 });
+
+      // Find a "Propose Trade" link (grid or list view) that isn't "My Card"
+      const proposeLink = page1.locator('a:has-text("Propose Trade")').first();
+      if (await proposeLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await proposeLink.click();
+      } else {
+        // Switch to list view and try there
+        const listBtn = page1.locator('.view-btn').first();
+        await listBtn.click();
+        await page1.waitForTimeout(500);
+        await page1.locator('a:has-text("Propose Trade")').first().click();
+      }
+
+      // Should be on /trades/new?with=...
+      await page1.waitForURL(/\/trades\/new/, { timeout: 8000 });
+      await expect(page1.locator('.listing-title', { hasText: 'Propose a Trade' })).toBeVisible({ timeout: 5000 });
+
+      // Select the first offered card (my cards)
+      const myCard = page1.locator('.card-picker-grid').first().locator('div[style]').first();
+      if (await myCard.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await myCard.click();
+      }
+
+      // Select the first requested card (their cards)
+      const theirCard = page1.locator('.card-picker-grid').nth(1).locator('div[style]').first();
+      if (await theirCard.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await theirCard.click();
+      }
+
+      // Click "Propose Trade" submit button
+      const submitBtn = page1.locator('.btn-place-bid', { hasText: 'Propose Trade' });
+      await submitBtn.click({ timeout: 5000 });
+
+      // Should redirect to trade detail page
+      await page1.waitForURL(/\/trades\//, { timeout: 10000 });
+      await expect(page1.locator('.listing-title', { hasText: /Trade with/ })).toBeVisible({ timeout: 5000 });
+    });
+
+    // ─── Step 8: User 2 accepts the trade ───
+    await test.step('User 2 accepts the trade', async () => {
+      await page2.goto('/trades');
+      await page2.waitForSelector('.trades-table, .listing-title', { timeout: 10000 });
+
+      // Click the first pending trade row
+      const tradeRow = page2.locator('.trades-table tbody tr').first();
+      if (await tradeRow.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await tradeRow.click();
+      } else {
+        // Try the View link
+        await page2.locator('a:has-text("View →")').first().click();
+      }
+
+      // Should be on a trade detail page
+      await page2.waitForURL(/\/trades\//, { timeout: 8000 });
+
+      // Click "Accept Trade"
+      const acceptBtn = page2.locator('.btn-place-bid', { hasText: 'Accept Trade' });
+      if (await acceptBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await acceptBtn.click();
+
+        // Expect toast or status change
+        await page2.waitForTimeout(1500);
+        // The timeline should now show "accepted" as active
+        const acceptedStep = page2.locator('text=accepted');
+        await expect(acceptedStep.first()).toBeVisible({ timeout: 5000 });
+      }
+    });
+
+    // ─── Step 9: Both users confirm receipt ───
+    await test.step('Both users confirm receipt', async () => {
+      // User 1 confirms receipt
+      await page1.reload();
+      await page1.waitForTimeout(1000);
+
+      const confirmBtn1 = page1.locator('.btn-place-bid', { hasText: 'Confirm Receipt' });
+      if (await confirmBtn1.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await confirmBtn1.click();
+        await page1.waitForTimeout(1500);
+        // Should see "Waiting for the other party" message
+        await expect(page1.locator('text=Waiting for the other party')).toBeVisible({ timeout: 5000 });
+      }
+
+      // User 2 confirms receipt
+      await page2.reload();
+      await page2.waitForTimeout(1000);
+
+      const confirmBtn2 = page2.locator('.btn-place-bid', { hasText: 'Confirm Receipt' });
+      if (await confirmBtn2.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await confirmBtn2.click();
+        await page2.waitForTimeout(2000);
+
+        // Trade should now be "Completed"
+        // The rating widget should appear
+        const rateWidget = page2.locator('text=Rate your experience');
+        await expect(rateWidget).toBeVisible({ timeout: 5000 });
+      }
+    });
+
+    // ─── Step 10: User 1 rates the trade ───
+    await test.step('User 1 rates the trade', async () => {
+      await page1.reload();
+      await page1.waitForTimeout(1000);
+
+      // The rating widget should appear
+      const rateWidget = page1.locator('text=Rate your experience');
+      if (await rateWidget.isVisible({ timeout: 5000 }).catch(() => false)) {
+        // Click the 5th star (5-star rating)
+        const stars = page1.locator('button:has-text("★")');
+        const starCount = await stars.count();
+        if (starCount >= 5) {
+          await stars.nth(4).click(); // 5th star (0-indexed)
+        }
+
+        await page1.waitForTimeout(1500);
+        // Rating confirmation should appear
+        await expect(page1.locator('text=Rating submitted')).toBeVisible({ timeout: 5000 });
+      }
+    });
+
     // Cleanup
     await ctx1.close();
     await ctx2.close();

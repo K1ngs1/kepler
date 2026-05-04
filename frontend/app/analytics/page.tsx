@@ -23,10 +23,12 @@ export default async function AnalyticsPage() {
     { count: activeTraders },
     { count: completedTrades },
     { count: forTradeCount },
+    { data: priceLastUpdated },
   ] = await Promise.all([
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('trade_offers').select('id', { count: 'exact', head: true }).eq('status', 'completed'),
     supabase.from('user_cards').select('id', { count: 'exact', head: true }).eq('for_trade', true),
+    supabase.from('card_prices').select('updated_at').order('updated_at', { ascending: false }).limit(1),
   ]);
 
   // Most Wanted Cards — top 20 cards where wanted=true
@@ -136,6 +138,26 @@ export default async function AnalyticsPage() {
           </div>
         </div>
 
+        {/* Price data freshness badge */}
+        <div style={{
+          fontSize: 12.5, color: '#888', marginBottom: 32,
+          padding: '10px 16px', border: '1px solid #e5e5e5', borderRadius: 4,
+          display: 'inline-block',
+        }}>
+          {priceLastUpdated && priceLastUpdated.length > 0 ? (
+            <>
+              Price data last updated:{' '}
+              <strong style={{ color: '#111' }}>
+                {new Date(priceLastUpdated[0].updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </strong>
+            </>
+          ) : (
+            <span style={{ color: '#c0392b' }}>
+              Price data not seeded — run <code style={{ background: '#f5f5f5', padding: '2px 6px', borderRadius: 3, fontSize: 11.5 }}>scripts/seed-prices.mjs</code>
+            </span>
+          )}
+        </div>
+
         {/* Most Wanted Cards */}
         <div style={{ marginBottom: 40 }}>
           <div className="section-hd" style={{ marginBottom: 16 }}>
@@ -143,7 +165,7 @@ export default async function AnalyticsPage() {
           </div>
           {mostWanted.length === 0 ? (
             <div style={{ color: '#aaa', fontSize: 13, padding: '20px 0' }}>
-              No wishlist data yet. Users need to mark cards as "Wanted" for data to appear.
+              No wishlist data yet. Users need to mark cards as &ldquo;Wanted&rdquo; for data to appear.
             </div>
           ) : (
             <div className="collection-grid">

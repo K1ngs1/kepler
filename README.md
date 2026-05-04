@@ -121,7 +121,7 @@ kepler/
 │   ├── components/         # Shared UI components
 │   ├── lib/                # Supabase clients, logger, error handler
 │   └── middleware.ts       # Auth guard
-├── backend/                # FastAPI mock server (legacy, do not delete)
+├��─ backend/                # FastAPI mock server (legacy, linguist-vendored)
 ├── scripts/                # Seed script
 └── supabase/
     ├── migrations/         # SQL migrations
@@ -148,8 +148,15 @@ See [`supabase/backup-guide.md`](supabase/backup-guide.md) for Point-In-Time Rec
 
 ```bash
 export SUPABASE_SERVICE_KEY=your-service-role-key
+
+# Option 1: Generate rarity-based estimates
 node scripts/seed-prices.mjs
+
+# Option 2: Import real prices from a CSV file
+node scripts/seed-prices.mjs ./scripts/price-template.csv
 ```
+
+The CSV format is: `catalog_card_name,set_name,market_price`. See `scripts/price-template.csv` for an example. Sources for real pricing data: [TCGPlayer](https://www.tcgplayer.com), [PriceCharting](https://www.pricecharting.com), or community spreadsheets.
 
 ### Email Notifications
 
@@ -183,6 +190,67 @@ TEST_USER2_PASSWORD=password2
 | `/` | Focus search bar |
 | `Ctrl+K` / `Cmd+K` | Open command palette |
 | `Esc` | Close any modal or palette |
+
+---
+
+## CI/CD
+
+A GitHub Actions workflow (`.github/workflows/test.yml`) runs on every push to `main` and on pull requests:
+- Installs dependencies, lints, and builds the frontend
+- Runs Playwright E2E tests (headless Chromium)
+- Uploads Playwright report as an artifact
+
+Set the following secrets in your GitHub repository settings:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `TEST_USER1_EMAIL`, `TEST_USER1_PASSWORD`
+- `TEST_USER2_EMAIL`, `TEST_USER2_PASSWORD`
+
+---
+
+## Deploying
+
+### Vercel (recommended)
+
+1. Import the repository on [vercel.com](https://vercel.com)
+2. Set the **Root Directory** to `frontend`
+3. Add environment variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+4. Deploy — Vercel auto-detects Next.js
+
+### Netlify
+
+1. Set build command: `cd frontend && npm run build`
+2. Set publish directory: `frontend/.next`
+3. Add the same environment variables
+4. Note: You may need the `@netlify/plugin-nextjs` plugin for App Router support
+
+### Replit
+
+The included `.replit` file auto-configures the dev server. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in Replit's **Secrets** tab (not in `.replit` directly).
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| "Supabase not configured" on page load | Ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set in `.env.local` or your hosting platform's env vars |
+| RLS policy errors (403 / permission denied) | Run all migrations in order in the Supabase SQL Editor. Check that RLS is enabled and policies exist on all tables |
+| "Propose Trade" button doesn't appear | You must be logged in, and the card must belong to another user. You cannot trade with yourself |
+| Google OAuth redirect fails | Set the correct Site URL and Redirect URLs in Supabase → Auth → URL Configuration |
+| Trade completes but cards don't transfer | Ensure migration `002_trade_functions.sql` was applied — the `complete_trade` function handles card ownership transfer |
+| Email notifications not sending | Deploy the edge function (`supabase functions deploy send-trade-email`), set `RESEND_API_KEY`, and create Database Webhooks |
+| Playwright tests time out | Make sure the dev server is running on the URL configured in `playwright.config.ts` (default: `http://localhost:3000`) |
+
+---
+
+## Known Limitations
+
+- **Supabase free tier**: 500MB database, 1GB file storage, 2GB bandwidth, 50K monthly active users
+- **No real-time pricing**: Card prices are seeded estimates based on rarity. Import real data via `scripts/seed-prices.mjs ./prices.csv`
+- **Email notifications require Resend**: Free tier allows 100 emails/day. Must deploy the edge function and configure webhooks manually
+- **No payment processing**: Kepler is a trade-only platform — no monetary transactions
+- **Single-region deployment**: Supabase projects are single-region. For global distribution, use Vercel's edge network for the frontend
 
 ---
 

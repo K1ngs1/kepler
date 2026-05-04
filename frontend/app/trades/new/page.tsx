@@ -153,8 +153,8 @@ function NewTradeForm() {
           : Promise.resolve({ data: null, error: null }),
       ]);
 
-      setMyCards((myRes.data as UserCard[]) ?? []);
-      if (recipientRes.data) setRecipient(recipientRes.data as Profile);
+      setMyCards((myRes.data as unknown as UserCard[]) ?? []);
+      if (recipientRes.data) setRecipient(recipientRes.data as unknown as Profile);
 
       if (withUserId) {
         const { data: theirRes } = await supabase
@@ -162,7 +162,7 @@ function NewTradeForm() {
           .select('id, condition, quantity, catalog_card_id, catalog_cards(name, set_name, number, image_url)')
           .eq('user_id', withUserId)
           .eq('for_trade', true);
-        setTheirCards((theirRes as UserCard[]) ?? []);
+        setTheirCards((theirRes as unknown as UserCard[]) ?? []);
       }
 
       setLoading(false);
@@ -309,7 +309,7 @@ function NewTradeForm() {
               <div style={{ marginBottom: 20, fontSize: 13, color: '#888' }}>
                 You have no cards marked for trade. Go to{' '}
                 <a href="/collection" style={{ color: '#111', fontWeight: 600 }}>My Collection</a>{' '}
-                and toggle "For Trade" on the cards you want to offer.
+                and toggle &ldquo;For Trade&rdquo; on the cards you want to offer.
               </div>
             )}
 

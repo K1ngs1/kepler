@@ -37,7 +37,7 @@ export default async function BinderPage({ params }: { params: { username: strin
     .eq('for_trade', true)
     .order('created_at', { ascending: false });
 
-  const cards = ((data as TradeCard[]) ?? []).filter((c) => c.catalog_cards != null);
+  const cards = ((data as unknown as TradeCard[]) ?? []).filter((c) => c.catalog_cards != null);
 
   const repStars = profile.reputation_score
     ? '★'.repeat(Math.round(profile.reputation_score)) + '☆'.repeat(5 - Math.round(profile.reputation_score))

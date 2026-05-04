@@ -168,14 +168,14 @@ export default function TradeDetailPage() {
           .select('*, initiator:profiles!trade_offers_initiator_id_fkey(username, reputation_score), recipient:profiles!trade_offers_recipient_id_fkey(username, reputation_score)')
           .eq('id', id)
           .single();
-        if (data) setTrade(data as Trade);
+        if (data) setTrade(data as unknown as Trade);
       };
 
       const loadItems = async () => {
         const res = await fetch(`/api/trade-items/${id}`);
         if (res.ok) {
           const data = await res.json();
-          setItems(data as TradeItem[]);
+          setItems(data as unknown as TradeItem[]);
         }
       };
 
@@ -185,7 +185,7 @@ export default function TradeDetailPage() {
           .select('id, sender_id, content, sent_at, profiles(username)')
           .eq('trade_id', id)
           .order('sent_at', { ascending: true });
-        if (data) setMessages(data as TradeMessage[]);
+        if (data) setMessages(data as unknown as TradeMessage[]);
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       };
 
@@ -248,6 +248,13 @@ export default function TradeDetailPage() {
     else { setRated(true); showToast('Rating submitted!'); }
   };
 
+  // Price estimation — hooks must be called unconditionally (before early returns)
+  const catalogIds = useMemo(() =>
+    items.filter((i) => i.user_cards?.catalog_card_id).map((i) => i.user_cards!.catalog_card_id),
+    [items]
+  );
+  const prices = usePrices(catalogIds);
+
   if (loading) return (
     <>
       <Nav />
@@ -272,12 +279,6 @@ export default function TradeDetailPage() {
   const requested = items.filter((i) => i.direction === 'request');
   const myConfirmed = isInitiator ? trade.initiator_confirmed : trade.recipient_confirmed;
 
-  // Price estimation
-  const catalogIds = useMemo(() =>
-    items.filter((i) => i.user_cards?.catalog_card_id).map((i) => i.user_cards!.catalog_card_id),
-    [items]
-  );
-  const prices = usePrices(catalogIds);
   const offerTotal = offered.reduce((sum, i) => sum + (prices[i.user_cards?.catalog_card_id ?? ''] ?? 0), 0);
   const requestTotal = requested.reduce((sum, i) => sum + (prices[i.user_cards?.catalog_card_id ?? ''] ?? 0), 0);
 

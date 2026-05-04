@@ -2,13 +2,18 @@
  * Seed card_prices table with approximate market values.
  *
  * Usage:
+ *   # Rarity-based estimation (default):
  *   SUPABASE_SERVICE_KEY=your-key node scripts/seed-prices.mjs
  *
- * This uses catalog_cards already in the database and assigns prices
- * based on rarity. For real pricing, replace with a CSV import.
+ *   # Import from CSV:
+ *   SUPABASE_SERVICE_KEY=your-key node scripts/seed-prices.mjs ./prices.csv
+ *
+ * CSV format (see scripts/price-template.csv):
+ *   catalog_card_name,set_name,market_price
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { readFileSync } from 'fs';
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SERVICE_KEY;
@@ -41,7 +46,88 @@ function randomPrice(rarity) {
   return Math.round(price * 100) / 100;
 }
 
-async function main() {
+function parseCsv(filePath) {
+  const raw = readFileSync(filePath, 'utf-8');
+  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 2) {
+    console.error('CSV must have a header row and at least one data row.');
+    process.exit(1);
+  }
+
+  const header = lines[0].toLowerCase();
+  if (!header.includes('catalog_card_name') || !header.includes('market_price')) {
+    console.error('CSV must have columns: catalog_card_name, set_name, market_price');
+    process.exit(1);
+  }
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    // Simple CSV parse — handles quoted fields with commas
+    const parts = lines[i].match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g);
+    if (!parts || parts.length < 3) continue;
+    const name = parts[0].replace(/^"|"$/g, '').trim();
+    const set = parts[1].replace(/^"|"$/g, '').trim();
+    const price = parseFloat(parts[2].replace(/^"|"$/g, '').trim());
+    if (!name || isNaN(price)) continue;
+    rows.push({ name, set, price });
+  }
+  return rows;
+}
+
+async function seedFromCsv(filePath) {
+  console.log(`Reading CSV from ${filePath}...`);
+  const rows = parseCsv(filePath);
+  console.log(`Parsed ${rows.length} price entries from CSV.`);
+
+  // Fetch all catalog cards for matching
+  const { data: cards, error } = await supabase
+    .from('catalog_cards')
+    .select('id, name, set_name')
+    .order('name');
+
+  if (error) { console.error(error); process.exit(1); }
+
+  let matched = 0;
+  const prices = [];
+
+  for (const row of rows) {
+    const match = cards.find(
+      (c) =>
+        c.name.toLowerCase() === row.name.toLowerCase() &&
+        (!row.set || c.set_name.toLowerCase() === row.set.toLowerCase())
+    );
+    if (match) {
+      prices.push({
+        catalog_card_id: match.id,
+        market_price: row.price,
+        updated_at: new Date().toISOString(),
+      });
+      matched++;
+    } else {
+      console.warn(`  No match for: "${row.name}" in set "${row.set}"`);
+    }
+  }
+
+  console.log(`Matched ${matched} / ${rows.length} entries to catalog cards.`);
+
+  // Upsert in batches
+  for (let i = 0; i < prices.length; i += 500) {
+    const batch = prices.slice(i, i + 500);
+    const { error: upsertError } = await supabase
+      .from('card_prices')
+      .upsert(batch, { onConflict: 'catalog_card_id' });
+
+    if (upsertError) {
+      console.error(`Error at batch ${i}:`, upsertError);
+    } else {
+      console.log(`  Upserted ${Math.min(i + 500, prices.length)} / ${prices.length}`);
+    }
+  }
+
+  console.log('Done! CSV prices imported.');
+}
+
+async function seedFromRarity() {
   console.log('Fetching catalog cards...');
   const { data: cards, error } = await supabase
     .from('catalog_cards')
@@ -71,7 +157,16 @@ async function main() {
     }
   }
 
-  console.log('Done! Card prices seeded.');
+  console.log('Done! Card prices seeded (rarity-based estimates).');
+}
+
+async function main() {
+  const csvPath = process.argv[2];
+  if (csvPath) {
+    await seedFromCsv(csvPath);
+  } else {
+    await seedFromRarity();
+  }
 }
 
 main();

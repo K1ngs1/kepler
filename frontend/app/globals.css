@@ -597,6 +597,14 @@ input, select { font-family: inherit; }
     text-align: center;
   }
   .footer-tag { font-size: 12.5px; }
+
+  /* ── MOBILE TAP & OVERFLOW FIXES ─────────────────────────── */
+  button, .nav-item, .nav-login, a.lot-bid-btn, .btn-place-bid, .btn-watchlist {
+    touch-action: manipulation;
+  }
+  body { overflow-x: hidden; }
+  .trades-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .listing-wrap { overflow-x: hidden; }
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -644,4 +652,11 @@ input, select { font-family: inherit; }
 
   /* ── FOOTER ── */
   .footer-inner { grid-template-columns: 1fr; gap: 20px; padding-bottom: 16px; }
+
+  /* ── TAP TARGETS — ensure minimum 44px height ── */
+  button, .nav-item, .nav-login, a.lot-bid-btn, .btn-place-bid, .btn-watchlist,
+  .modal-confirm, .modal-cancel, .login-submit-btn {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
 }

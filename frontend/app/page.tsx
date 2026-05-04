@@ -91,8 +91,8 @@ export default async function HomePage() {
       heroSlides = (heroRes.data as CatalogCard[]).map(cardToSlide);
     }
     if (countRes.count) catalogCount = countRes.count;
-    if (tradeableRes.data) forTradeCards = tradeableRes.data as ForTradeCard[];
-    if (tradesRes.data) completedTrades = tradesRes.data as CompletedTrade[];
+    if (tradeableRes.data) forTradeCards = tradeableRes.data as unknown as ForTradeCard[];
+    if (tradesRes.data) completedTrades = tradesRes.data as unknown as CompletedTrade[];
   } catch {
     // Supabase not configured — show fallback hero + empty states
   }
@@ -123,12 +123,12 @@ export default async function HomePage() {
       </div>
 
       {/* Recent Completed Trades */}
-      {completedTrades.length > 0 && (
-        <div className="section">
-          <div className="section-hd">
-            <div className="section-hd-title">Recent Completed Trades</div>
-            <a href="/trades" className="section-hd-link">View All Trades</a>
-          </div>
+      <div className="section">
+        <div className="section-hd">
+          <div className="section-hd-title">Recent Completed Trades</div>
+          <a href="/trades" className="section-hd-link">View All Trades</a>
+        </div>
+        {completedTrades.length > 0 ? (
           <table className="trades-table">
             <thead>
               <tr>
@@ -147,8 +147,12 @@ export default async function HomePage() {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        ) : (
+          <div style={{ textAlign: 'center', padding: '32px 0', color: '#888', fontSize: 13 }}>
+            No trades have been completed yet. Be the first!
+          </div>
+        )}
+      </div>
 
       <Footer />
     </>

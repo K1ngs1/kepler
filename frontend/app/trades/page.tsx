@@ -45,7 +45,7 @@ export default function TradesPage() {
           .select('id, status, created_at, updated_at, initiator_id, recipient_id, initiator:profiles!trade_offers_initiator_id_fkey(username), recipient:profiles!trade_offers_recipient_id_fkey(username)')
           .or(`initiator_id.eq.${user.id},recipient_id.eq.${user.id}`)
           .order('updated_at', { ascending: false });
-        setTrades((data as Trade[]) ?? []);
+        setTrades((data as unknown as Trade[]) ?? []);
         setLoading(false);
       };
 
@@ -97,6 +97,16 @@ export default function TradesPage() {
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#aaa', fontSize: 13 }}>Loading trades…</div>
         ) : !authed ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#888', fontSize: 14 }}>Sign in to see your trades.</div>
+        ) : displayed.length === 0 && active.length === 0 && history.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#333', marginBottom: 8 }}>You don&apos;t have any trades yet</div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 24, maxWidth: 400, margin: '0 auto 24px' }}>
+              Browse the catalog and mark some cards as &ldquo;Wanted&rdquo; to find a trading partner.
+            </div>
+            <a href="/catalog" style={{ background: '#111', color: '#fff', borderRadius: 5, padding: '10px 24px', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
+              Browse Catalog
+            </a>
+          </div>
         ) : displayed.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
             <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>No {tab} trades.</div>

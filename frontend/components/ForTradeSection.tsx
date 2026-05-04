@@ -36,7 +36,7 @@ export default function ForTradeSection({ initial }: Props) {
         .eq('for_trade', true)
         .order('created_at', { ascending: false })
         .limit(6);
-      if (data) setCards(data as ForTradeCard[]);
+      if (data) setCards(data as unknown as ForTradeCard[]);
     };
 
     const channel = supabase

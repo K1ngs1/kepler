@@ -56,7 +56,7 @@ export default function CollectionPage() {
       .order('created_at', { ascending: false });
 
     // Filter out any rows where the catalog_cards join returned null
-    const rows = ((data as CollectionCard[]) ?? []).filter((c) => c.catalog_cards != null);
+    const rows = ((data as unknown as CollectionCard[]) ?? []).filter((c) => c.catalog_cards != null);
     setCollection(rows);
     setLoading(false);
   }, []);
@@ -232,7 +232,7 @@ export default function CollectionPage() {
           <div style={{ textAlign: 'center', padding: '80px 0' }}>
             <div style={{ fontSize: 36, marginBottom: 14 }}>🃏</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#333', marginBottom: 8 }}>Your collection is empty</div>
-            <div style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>Browse the catalog and click "+ Add to Collection" on any card.</div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 24 }}>Browse the catalog and click &ldquo;+ Add to Collection&rdquo; on any card.</div>
             <a href="/catalog" style={{ background: '#111', color: '#fff', borderRadius: 5, padding: '10px 24px', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>
               Browse Catalog
             </a>
