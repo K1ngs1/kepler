@@ -176,6 +176,10 @@ export default function AuctionsPage() {
         </button>
 
         <main className="listing-main">
+          <div style={{ display: 'flex', gap: 16, marginBottom: 24, borderBottom: '1px solid #e5e5e5', paddingBottom: 16 }}>
+            <a href="/auctions" style={{ fontSize: 14, color: '#111', textDecoration: 'none', fontWeight: 700, borderBottom: '2px solid #111', paddingBottom: 16, marginBottom: -17 }}>Individual Cards</a>
+            <a href="/listings" style={{ fontSize: 14, color: '#777', textDecoration: 'none', fontWeight: 600 }}>Collections & Lots</a>
+          </div>
           <div className="listing-toolbar">
             <div className="listing-title">Cards For Trade</div>
             <div className="toolbar-search">

@@ -6,6 +6,7 @@ import Footer from '@/components/Footer';
 import CardImage from '@/components/CardImage';
 import PriceBadge from '@/components/PriceBadge';
 import TradeValueSummary from '@/components/TradeValueSummary';
+import DepositSection from '@/components/DepositSection';
 import { createClient } from '@/lib/supabase/client';
 import { usePrices } from '@/lib/usePrices';
 import { useParams, useRouter } from 'next/navigation';
@@ -44,6 +45,11 @@ interface Trade {
   recipient_id: string;
   initiator_confirmed: boolean;
   recipient_confirmed: boolean;
+  cash_amount?: number | null;
+  listing_id?: string | null;
+  deposit_amount?: number | null;
+  initiator_deposit_paid?: boolean;
+  recipient_deposit_paid?: boolean;
   created_at: string;
   updated_at: string;
   initiator: { username: string | null; reputation_score: number | null } | null;
@@ -298,6 +304,11 @@ export default function TradeDetailPage() {
           <div className="listing-title" style={{ flex: 1 }}>
             Trade with {partnerName}
             <ReputationStars score={partnerRep ?? null} />
+            {trade.listing_id && (
+              <a href={`/listings/${trade.listing_id}`} style={{ marginLeft: 16, fontSize: 12, fontWeight: 500, color: '#555', textDecoration: 'underline' }}>
+                View Listing
+              </a>
+            )}
           </div>
         </div>
 
@@ -379,8 +390,13 @@ export default function TradeDetailPage() {
             </div>
 
             {/* Trade value summary */}
+            {trade.cash_amount != null && trade.cash_amount > 0 && (
+              <div style={{ marginBottom: 12, padding: '8px 12px', background: '#edf9f1', border: '1px solid #7bc99b', borderRadius: 4, display: 'inline-block', fontSize: 13, color: '#1a6b3a', fontWeight: 600 }}>
+                Includes Cash Offer: ${trade.cash_amount.toFixed(2)}
+              </div>
+            )}
             <TradeValueSummary
-              offerTotal={offerTotal}
+              offerTotal={offerTotal + (trade.cash_amount || 0)}
               requestTotal={requestTotal}
               offerLabel={isInitiator ? 'Your offer' : `${trade.initiator?.username ?? 'Their'} offer`}
               requestLabel={isInitiator ? 'Your request' : `${trade.recipient?.username ?? 'Their'} request`}
@@ -410,6 +426,18 @@ export default function TradeDetailPage() {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Security Deposit Section */}
+            {(trade.status === 'accepted' || trade.status === 'completed') && (
+              <DepositSection
+                tradeId={trade.id}
+                depositAmount={trade.deposit_amount ?? null}
+                initiatorPaid={trade.initiator_deposit_paid ?? false}
+                recipientPaid={trade.recipient_deposit_paid ?? false}
+                isInitiator={isInitiator}
+                partnerName={partnerName}
+              />
             )}
 
             {/* Star rating — shown when completed and user hasn't rated yet */}

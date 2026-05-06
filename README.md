@@ -11,6 +11,9 @@ A production-ready peer-to-peer trading platform for graded Pokémon TCG cards, 
 - Real-time trade chat powered by Supabase Realtime
 - Wishlist matching — see who has the cards you want
 - Google OAuth and email/password authentication
+- **Marketplace Listings** — create listings with multiple cards, set prices or accept offers
+- **Buy Now & Trade Offers** — buy collections outright or propose hybrid cash/card trades
+- **Escrow Security Deposits** — optionally secure high-value trades with a refundable deposit
 - **Photo Upload** — upload your own card photos to show alongside official art
 - **Trade Value Estimator** — see estimated market values and fairness comparison during trades
 - **Email Notifications** — get notified via email for new trade offers and messages (Resend + Supabase Edge Functions)
@@ -64,6 +67,7 @@ Run all migration files in order in your Supabase SQL Editor:
 4. `supabase/migrations/004_card_photos.sql` — photo_url column on user_cards
 5. `supabase/migrations/005_card_prices.sql` — card_prices table for trade value estimates
 6. `supabase/migrations/006_email_notifications.sql` — email_notifications preference on profiles
+7. `supabase/migrations/007_listings_and_deposits.sql` — listings, purchase offers, and deposit schema
 
 ### 4. Seed the card catalog
 
@@ -167,6 +171,13 @@ The CSV format is: `catalog_card_name,set_name,market_price`. See `scripts/price
    - `trade_offers` INSERT → call `send-trade-email`
    - `trade_messages` INSERT → call `send-trade-email`
 
+### Stripe Integration (MVP)
+
+1. Get your Stripe secret key from the [Stripe Dashboard](https://dashboard.stripe.com)
+2. Set it in your Supabase Edge Functions environment: `supabase secrets set STRIPE_SECRET_KEY=sk_test_...`
+3. Deploy the Stripe Checkout function: `supabase functions deploy stripe-checkout`
+4. (Future Work) Implement a Stripe webhook listener to automatically update `purchase_offers` status to `paid` upon successful payment. For MVP, the UI just records the session ID.
+
 ### Running E2E Tests
 
 ```bash
@@ -249,7 +260,7 @@ The included `.replit` file auto-configures the dev server. Set `NEXT_PUBLIC_SUP
 - **Supabase free tier**: 500MB database, 1GB file storage, 2GB bandwidth, 50K monthly active users
 - **No real-time pricing**: Card prices are seeded estimates based on rarity. Import real data via `scripts/seed-prices.mjs ./prices.csv`
 - **Email notifications require Resend**: Free tier allows 100 emails/day. Must deploy the edge function and configure webhooks manually
-- **No payment processing**: Kepler is a trade-only platform — no monetary transactions
+- **Stripe integration is MVP**: The current Stripe integration provides a Checkout URL but does not yet automate the confirmation webhook. Manual verification of `purchase_offers` is required.
 - **Single-region deployment**: Supabase projects are single-region. For global distribution, use Vercel's edge network for the frontend
 
 ---
