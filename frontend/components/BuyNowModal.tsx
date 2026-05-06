@@ -5,7 +5,8 @@ import { parseAbi, formatUnits } from 'viem';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { createClient } from '@/lib/supabase/client';
-import { USDC_ADDRESS, USDC_DECIMALS } from '@/lib/web3/usdc';
+import { USDC_DECIMALS } from '@/lib/web3/usdc';
+import { USDC_ADDRESS } from '@/lib/web3/config';
 
 const abi = parseAbi([
   'function transfer(address to, uint256 amount) returns (bool)',
