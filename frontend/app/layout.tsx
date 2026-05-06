@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, Libre_Baskerville } from 'next/font/google';
 import KeyboardShortcuts from '@/components/KeyboardShortcuts';
-import Web3Provider from '@/components/Web3Provider';
+import { Web3Provider } from '@/components/Web3Provider';
 import './globals.css';
 
 const inter = Inter({

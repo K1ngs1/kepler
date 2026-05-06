@@ -1,12 +1,18 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { useState, useMemo } from 'react';
+import { parseAbi, formatUnits } from 'viem';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import TxStatus from './TxStatus';
-import type { Stage } from './TxStatus';
-import { USDC_ADDRESS, MERCHANT_WALLET, ERC20_ABI, parseUsdc, formatUsdc } from '@/lib/web3/usdc';
+import { createClient } from '@/lib/supabase/client';
+import { USDC_ADDRESS, USDC_DECIMALS } from '@/lib/web3/usdc';
+
+const abi = parseAbi([
+  'function transfer(address to, uint256 amount) returns (bool)',
+  'function balanceOf(address account) view returns (uint256)',
+]);
+
+const MERCHANT_WALLET = process.env.NEXT_PUBLIC_MERCHANT_WALLET as `0x${string}` | undefined;
 
 interface ListingItem {
   id: string;
@@ -26,6 +32,8 @@ interface Props {
   prices: Record<string, number>;
 }
 
+type TxStage = 'idle' | 'wallet' | 'submitted' | 'confirming' | 'confirmed' | 'error';
+
 export default function BuyNowModal({ onClose, listingId, sellerId, items, prices }: Props) {
   const { address, isConnected } = useAccount();
 
@@ -33,16 +41,14 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
     new Set(items.map((i) => i.id))
   );
   const [error, setError] = useState('');
-  const [txStage, setTxStage] = useState<Stage>('idle');
+  const [txStage, setTxStage] = useState<TxStage>('idle');
   const [offerId, setOfferId] = useState<string | null>(null);
 
   const calculatedTotal = useMemo(() => {
     let sum = 0;
     items.forEach((item) => {
-      if (selectedItemIds.has(item.id)) {
-        if (item.custom_price != null) {
-          sum += item.custom_price;
-        }
+      if (selectedItemIds.has(item.id) && item.custom_price != null) {
+        sum += item.custom_price;
       }
     });
     return sum;
@@ -50,27 +56,29 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
 
   const [offerAmount, setOfferAmount] = useState(calculatedTotal.toString());
 
-  // ── USDC balance ──
+  // Read USDC balance
   const { data: rawBalance } = useReadContract({
-    address: USDC_ADDRESS,
-    abi: ERC20_ABI,
+    address: USDC_ADDRESS as `0x${string}`,
+    abi,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
     query: { enabled: !!address },
   });
-  const usdcBalance = rawBalance != null ? formatUsdc(rawBalance as bigint) : null;
+  const usdcBalance = rawBalance != null
+    ? parseFloat(formatUnits(rawBalance as bigint, USDC_DECIMALS))
+    : null;
 
-  // ── wagmi write hook ──
+  // Write contract hook
   const { writeContract, data: txHash, isPending: isSigning, error: writeError } = useWriteContract();
 
-  // ── wait for receipt ──
+  // Wait for receipt
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash: txHash,
     query: { enabled: !!txHash },
   });
 
-  // Derive txStage from wagmi state
-  const derivedStage: Stage = useMemo(() => {
+  // Derive stage from wagmi state
+  const derivedStage: TxStage = useMemo(() => {
     if (txStage === 'error') return 'error';
     if (isConfirmed) return 'confirmed';
     if (isConfirming) return 'confirming';
@@ -79,27 +87,15 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
     return txStage;
   }, [txStage, isConfirmed, isConfirming, txHash, isSigning]);
 
-  // When confirmed, verify on backend
-  const verifyPayment = useCallback(async (hash: string, purchaseOfferId: string) => {
-    const supabase = createClient();
-    if (!supabase) return;
-
-    try {
-      const { data, error: fnErr } = await supabase.functions.invoke('polygon-verify', {
-        body: { purchase_offer_id: purchaseOfferId, txn_hash: hash },
-      });
-      if (fnErr) throw fnErr;
-      // Payment verified — stage is already 'confirmed' from wagmi
-    } catch (err: any) {
-      console.error('Verification error:', err);
-      // Don't override confirmed state — the on-chain tx succeeded
-    }
-  }, []);
-
-  // Trigger verification when transaction is confirmed
+  // Verify payment on backend when confirmed
   if (isConfirmed && txHash && offerId && txStage !== 'confirmed') {
     setTxStage('confirmed');
-    verifyPayment(txHash, offerId);
+    const supabase = createClient();
+    if (supabase) {
+      supabase.functions.invoke('polygon-verify', {
+        body: { purchase_offer_id: offerId, tx_hash: txHash },
+      }).catch((err) => console.error('Verification error:', err));
+    }
   }
 
   if (writeError && txStage !== 'error') {
@@ -126,12 +122,14 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
       setError('Please enter a valid offer amount.');
       return;
     }
-
     if (!isConnected || !address) {
       setError('Please connect your wallet first.');
       return;
     }
-
+    if (!MERCHANT_WALLET) {
+      setError('Merchant wallet is not configured.');
+      return;
+    }
     if (usdcBalance !== null && amount > usdcBalance) {
       setError(`Insufficient USDC balance. You have ${usdcBalance.toFixed(2)} USDC.`);
       return;
@@ -162,9 +160,8 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
           listing_id: listingId,
           buyer_id: user.id,
           seller_id: sellerId,
-          amount: amount,
+          amount,
           status: 'pending',
-          buyer_wallet: address,
         })
         .select('id')
         .single();
@@ -173,11 +170,12 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
       setOfferId(data.id);
 
       // 2. Trigger USDC transfer to merchant wallet
+      const amountInUnits = BigInt(Math.round(amount * 10 ** USDC_DECIMALS));
       writeContract({
-        address: USDC_ADDRESS,
-        abi: ERC20_ABI,
+        address: USDC_ADDRESS as `0x${string}`,
+        abi,
         functionName: 'transfer',
-        args: [MERCHANT_WALLET, parseUsdc(amount)],
+        args: [MERCHANT_WALLET, amountInUnits],
       });
     } catch (err: any) {
       console.error(err);
@@ -188,17 +186,21 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
 
   const isProcessing = derivedStage === 'wallet' || derivedStage === 'submitted' || derivedStage === 'confirming';
 
+  const explorerBase = process.env.NEXT_PUBLIC_CHAIN === 'mainnet'
+    ? 'https://polygonscan.com/tx/'
+    : 'https://amoy.polygonscan.com/tx/';
+
   return (
     <div className="modal-bg" onClick={isProcessing ? undefined : onClose}>
       <div className="login-modal" onClick={(e) => e.stopPropagation()} style={{ width: 480 }}>
         <button className="login-close" onClick={onClose} disabled={isProcessing}>×</button>
         <div className="login-logo">Kepler</div>
         <div className="login-heading">Buy Cards</div>
-        <div className="login-sub">Select the cards you want to purchase with USDC.</div>
+        <div className="login-sub">Select the cards you want to purchase with USDC on Polygon.</div>
 
         {error && <div className="auth-error" style={{ marginBottom: 14 }}>{error}</div>}
 
-        {/* Wallet connect step */}
+        {/* Wallet connection step */}
         {!isConnected ? (
           <div style={{ marginBottom: 20, textAlign: 'center' }}>
             <div style={{ fontSize: 13, color: '#555', marginBottom: 12 }}>Connect your wallet to continue</div>
@@ -207,8 +209,12 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
                 <button
                   onClick={openConnectModal}
                   disabled={!mounted}
-                  className="nav-sell"
-                  style={{ fontSize: 14, padding: '10px 24px', width: '100%', borderRadius: 6 }}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center',
+                    background: '#e5342a', color: '#fff', border: 'none',
+                    borderRadius: 999, padding: '12px 28px', fontSize: 14,
+                    fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                  }}
                 >
                   Connect Wallet
                 </button>
@@ -228,21 +234,21 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
               {usdcBalance !== null && (
                 <span style={{
                   display: 'inline-block', fontSize: 11, color: '#555',
-                  border: '1px solid #ddd', borderRadius: 3, padding: '2px 8px',
+                  background: '#f0f0f0', borderRadius: 12, padding: '3px 10px',
                 }}>
                   {usdcBalance.toFixed(2)} USDC
                 </span>
               )}
             </div>
 
-            {/* Card selection list */}
+            {/* Card selection */}
             <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 16, border: '1px solid #e5e5e5', borderRadius: 6 }}>
               {items.map((item) => (
                 <label
                   key={item.id}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
-                    borderBottom: '1px solid #f0f0f0', cursor: 'pointer'
+                    borderBottom: '1px solid #f0f0f0', cursor: 'pointer',
                   }}
                 >
                   <input
@@ -283,15 +289,47 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
               {isProcessing
                 ? 'Processing…'
                 : derivedStage === 'confirmed'
-                ? '✓ Payment Complete'
+                ? 'Payment Complete'
                 : 'Pay with USDC'}
             </button>
 
-            <TxStatus
-              stage={derivedStage}
-              txHash={txHash}
-              error={error}
-            />
+            {/* Transaction status */}
+            {derivedStage !== 'idle' && (
+              <div style={{
+                marginTop: 16, padding: 16, background: '#fff',
+                border: '1px solid #e5e5e5', borderRadius: 8,
+                fontSize: 13, color: '#555',
+              }}>
+                <div style={{
+                  fontWeight: 600, marginBottom: 6,
+                  color: derivedStage === 'error' ? '#c0392b'
+                    : derivedStage === 'confirmed' ? '#3db56c' : '#111',
+                }}>
+                  {derivedStage === 'wallet' && 'Waiting for wallet confirmation…'}
+                  {derivedStage === 'submitted' && 'Transaction submitted'}
+                  {derivedStage === 'confirming' && 'Waiting for block confirmations…'}
+                  {derivedStage === 'confirmed' && 'Payment confirmed!'}
+                  {derivedStage === 'error' && 'Transaction failed'}
+                </div>
+                {txHash && (
+                  <div style={{ fontSize: 12, color: '#777' }}>
+                    tx:{' '}
+                    <a
+                      href={`${explorerBase}${txHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: '#555', textDecoration: 'underline', fontFamily: 'monospace' }}
+                    >
+                      {txHash.slice(0, 6)}…{txHash.slice(-4)}
+                    </a>
+                  </div>
+                )}
+                {(derivedStage === 'wallet' || derivedStage === 'confirming') && (
+                  <div style={{ marginTop: 8, width: 18, height: 18, border: '2.5px solid #e5e5e5', borderTopColor: '#e5342a', borderRadius: '50%', animation: 'keplerSpin 0.8s linear infinite' }} />
+                )}
+                <style>{`@keyframes keplerSpin { to { transform: rotate(360deg); } }`}</style>
+              </div>
+            )}
           </>
         )}
       </div>

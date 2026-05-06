@@ -48,8 +48,8 @@ interface Trade {
   cash_amount?: number | null;
   listing_id?: string | null;
   deposit_amount?: number | null;
-  initiator_deposit_paid?: boolean;
-  recipient_deposit_paid?: boolean;
+  initiator_deposit_locked?: boolean;
+  recipient_deposit_locked?: boolean;
   created_at: string;
   updated_at: string;
   initiator: { username: string | null; reputation_score: number | null } | null;
@@ -433,8 +433,8 @@ export default function TradeDetailPage() {
               <DepositSection
                 tradeId={trade.id}
                 depositAmount={trade.deposit_amount ?? null}
-                initiatorPaid={trade.initiator_deposit_paid ?? false}
-                recipientPaid={trade.recipient_deposit_paid ?? false}
+                initiatorLocked={trade.initiator_deposit_locked ?? false}
+                recipientLocked={trade.recipient_deposit_locked ?? false}
                 isInitiator={isInitiator}
                 partnerName={partnerName}
               />
