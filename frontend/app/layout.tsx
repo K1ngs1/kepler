@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, Libre_Baskerville } from 'next/font/google';
 import KeyboardShortcuts from '@/components/KeyboardShortcuts';
+import Web3Provider from '@/components/Web3Provider';
 import './globals.css';
 
 const inter = Inter({
@@ -31,8 +32,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${inter.variable} ${libreBaskerville.variable}`}>
-        <KeyboardShortcuts />
-        {children}
+        <Web3Provider>
+          <KeyboardShortcuts />
+          {children}
+        </Web3Provider>
       </body>
     </html>
   );

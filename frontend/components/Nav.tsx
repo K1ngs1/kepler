@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import LoginModal from './LoginModal';
 import SettingsModal from './SettingsModal';
 import { createClient } from '@/lib/supabase/client';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 interface NavProps {
   user?: { email: string; name: string } | null;
@@ -99,6 +100,25 @@ export default function Nav({ user: initialUser }: NavProps) {
           <Link href="/wishlist" className={`nav-item${pathname === '/wishlist' ? ' active' : ''}`}>
             Wishlist
           </Link>
+
+          {/* Wallet connect — styled like .nav-sell */}
+          <ConnectButton.Custom>
+            {({ account, chain, openConnectModal, openAccountModal, mounted }) => {
+              const connected = mounted && account && chain;
+              return (
+                <button
+                  onClick={connected ? openAccountModal : openConnectModal}
+                  className="nav-sell"
+                  style={{ fontSize: 13, padding: '6px 14px' }}
+                >
+                  {connected
+                    ? `${account.address.slice(0, 6)}…${account.address.slice(-4)}`
+                    : 'Connect Wallet'}
+                </button>
+              );
+            }}
+          </ConnectButton.Custom>
+
           {user && (
             <button
               className="nav-login"

@@ -55,6 +55,11 @@ Edit `.env.local` and fill in your Supabase credentials:
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_KEY=your-service-role-key
+
+# Polygon / Web3
+NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=your-walletconnect-project-id
+NEXT_PUBLIC_CHAIN=amoy
+NEXT_PUBLIC_MERCHANT_WALLET=0xYourMerchantWalletAddress
 ```
 
 ### 3. Apply database migrations
@@ -68,6 +73,7 @@ Run all migration files in order in your Supabase SQL Editor:
 5. `supabase/migrations/005_card_prices.sql` — card_prices table for trade value estimates
 6. `supabase/migrations/006_email_notifications.sql` — email_notifications preference on profiles
 7. `supabase/migrations/007_listings_and_deposits.sql` — listings, purchase offers, and deposit schema
+8. `supabase/migrations/008_polygon_payments.sql` — Polygon USDC payment columns
 
 ### 4. Seed the card catalog
 
@@ -99,6 +105,10 @@ Visit [http://localhost:5000](http://localhost:5000).
 | `trade_offers` | Trade proposals between two users |
 | `trade_items` | Cards involved in a trade (direction: offer / request) |
 | `trade_messages` | Real-time chat messages per trade |
+| `listings` | Multi-card marketplace listings with photos and prices |
+| `listing_items` | Individual cards within a listing |
+| `listing_photos` | Photos uploaded for a listing |
+| `purchase_offers` | Buy-now purchase offers with USDC payment tracking |
 | `lots` / `bids` | Legacy auction tables (not active) |
 
 All trade state changes go through PostgreSQL functions:
@@ -123,12 +133,13 @@ kepler/
 │   │   ├── wishlist/       # Wanted cards + match suggestions
 │   │   └── auth/callback/  # OAuth callback
 │   ├── components/         # Shared UI components
-│   ├── lib/                # Supabase clients, logger, error handler
+│   ├── lib/                # Supabase clients, logger, error handler, web3 config
 │   └── middleware.ts       # Auth guard
 ├��─ backend/                # FastAPI mock server (legacy, linguist-vendored)
 ├── scripts/                # Seed script
 └── supabase/
-    ├── migrations/         # SQL migrations
+    ├── migrations/         # SQL migrations (001–008)
+    ├── functions/          # Edge functions (send-trade-email, polygon-verify, polygon-release)
     └── backup-guide.md     # Backup instructions
 ```
 
@@ -171,12 +182,57 @@ The CSV format is: `catalog_card_name,set_name,market_price`. See `scripts/price
    - `trade_offers` INSERT → call `send-trade-email`
    - `trade_messages` INSERT → call `send-trade-email`
 
-### Stripe Integration (MVP)
+### Polygon USDC Payments
 
-1. Get your Stripe secret key from the [Stripe Dashboard](https://dashboard.stripe.com)
-2. Set it in your Supabase Edge Functions environment: `supabase secrets set STRIPE_SECRET_KEY=sk_test_...`
-3. Deploy the Stripe Checkout function: `supabase functions deploy stripe-checkout`
-4. (Future Work) Implement a Stripe webhook listener to automatically update `purchase_offers` status to `paid` upon successful payment. For MVP, the UI just records the session ID.
+Kepler uses USDC on Polygon PoS for all payments (purchases and security deposits).
+
+#### 1. Get a WalletConnect Project ID
+
+1. Go to [WalletConnect Cloud](https://cloud.walletconnect.com/) and sign up
+2. Create a new project and copy your **Project ID**
+3. Set `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` in `.env.local`
+
+#### 2. Set up a Merchant Wallet
+
+1. Create a new wallet in [MetaMask](https://metamask.io/) (or any wallet) — this is your escrow/merchant wallet
+2. Copy the wallet address and set `NEXT_PUBLIC_MERCHANT_WALLET` in `.env.local`
+3. Export the private key and set `MERCHANT_PRIVATE_KEY` in your Supabase Edge Function secrets (**never** expose this client-side)
+
+#### 3. Deploy Edge Functions
+
+```bash
+supabase functions deploy polygon-verify
+supabase functions deploy polygon-release
+supabase secrets set MERCHANT_PRIVATE_KEY=0xYourPrivateKey
+supabase secrets set MERCHANT_WALLET=0xYourMerchantAddress
+supabase secrets set POLYGON_RPC_URL=https://polygon-rpc.com
+supabase secrets set CHAIN=amoy   # or 'polygon' for mainnet
+```
+
+#### 4. Testing with Amoy Testnet
+
+1. Set `NEXT_PUBLIC_CHAIN=amoy` in `.env.local`
+2. Get free testnet MATIC from the [Polygon Amoy Faucet](https://faucet.polygon.technology/)
+3. Get testnet USDC by deploying a mock ERC-20 or using the Amoy USDC at `0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582`
+4. Switch to `NEXT_PUBLIC_CHAIN=polygon` when deploying to production
+
+#### 5. Database Webhook for Trade Completion
+
+To automate fund release, create a Database Webhook in Supabase Dashboard:
+- Table: `trade_offers`
+- Event: UPDATE (filter `status = 'completed'`)
+- Endpoint: call the `polygon-release` edge function
+
+#### Environment Variables Summary
+
+| Variable | Where | Description |
+|---|---|---|
+| `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | `.env.local` | WalletConnect Cloud project ID |
+| `NEXT_PUBLIC_CHAIN` | `.env.local` | `amoy` (testnet) or `polygon` (mainnet) |
+| `NEXT_PUBLIC_MERCHANT_WALLET` | `.env.local` | Merchant/escrow wallet address |
+| `MERCHANT_PRIVATE_KEY` | Supabase secrets | Merchant wallet private key (server-side only) |
+| `POLYGON_RPC_URL` | Supabase secrets | Polygon RPC endpoint |
+| `CHAIN` | Supabase secrets | `amoy` or `polygon` |
 
 ### Running E2E Tests
 
@@ -251,6 +307,8 @@ The included `.replit` file auto-configures the dev server. Set `NEXT_PUBLIC_SUP
 | Google OAuth redirect fails | Set the correct Site URL and Redirect URLs in Supabase → Auth → URL Configuration |
 | Trade completes but cards don't transfer | Ensure migration `002_trade_functions.sql` was applied — the `complete_trade` function handles card ownership transfer |
 | Email notifications not sending | Deploy the edge function (`supabase functions deploy send-trade-email`), set `RESEND_API_KEY`, and create Database Webhooks |
+| Wallet won't connect | Ensure `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` is set. Check browser console for RainbowKit errors |
+| USDC transfer fails | Ensure your wallet has enough MATIC for gas and USDC for the transfer. On testnet, use the Amoy faucet |
 | Playwright tests time out | Make sure the dev server is running on the URL configured in `playwright.config.ts` (default: `http://localhost:3000`) |
 
 ---
@@ -260,7 +318,7 @@ The included `.replit` file auto-configures the dev server. Set `NEXT_PUBLIC_SUP
 - **Supabase free tier**: 500MB database, 1GB file storage, 2GB bandwidth, 50K monthly active users
 - **No real-time pricing**: Card prices are seeded estimates based on rarity. Import real data via `scripts/seed-prices.mjs ./prices.csv`
 - **Email notifications require Resend**: Free tier allows 100 emails/day. Must deploy the edge function and configure webhooks manually
-- **Stripe integration is MVP**: The current Stripe integration provides a Checkout URL but does not yet automate the confirmation webhook. Manual verification of `purchase_offers` is required.
+- **Polygon payments**: The `polygon-release` edge function requires the merchant wallet private key and sufficient MATIC for gas. Automated release via database webhook is documented but must be configured manually in the Supabase Dashboard.
 - **Single-region deployment**: Supabase projects are single-region. For global distribution, use Vercel's edge network for the frontend
 
 ---
