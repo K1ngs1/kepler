@@ -1,4 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config({ path: path.resolve(__dirname, '.env.local') });
 
 export default defineConfig({
   testDir: './tests',
@@ -23,8 +27,8 @@ export default defineConfig({
     ? undefined
     : {
         command: 'npm run dev',
-        url: 'http://localhost:3000',
+        url: process.env.BASE_URL || 'http://localhost:3000',
         reuseExistingServer: true,
-        timeout: 30_000,
+        timeout: 120_000,
       },
 });

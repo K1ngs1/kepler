@@ -30,6 +30,9 @@ export default function NewListingPage() {
     custom_price: string;
   }[]>([]);
 
+  const [listingPhotos, setListingPhotos] = useState<File[]>([]);
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -64,6 +67,19 @@ export default function NewListingPage() {
 
   const removeCard = (index: number) => {
     setSelectedCards(selectedCards.filter((_, i) => i !== index));
+  };
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const newPreviews = files.map(f => URL.createObjectURL(f));
+    setListingPhotos(prev => [...prev, ...files]);
+    setPhotoPreviews(prev => [...prev, ...newPreviews]);
+  };
+
+  const removePhoto = (index: number) => {
+    setListingPhotos(prev => prev.filter((_, i) => i !== index));
+    setPhotoPreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async () => {
@@ -101,6 +117,34 @@ export default function NewListingPage() {
         .single();
 
       if (listingError) throw listingError;
+
+      let coverPhotoUrl = null;
+      for (let i = 0; i < listingPhotos.length; i++) {
+        const file = listingPhotos[i];
+        const path = `listings/${listing.id}/${Date.now()}-${i}`;
+        // Try uploading to 'card-photos' bucket as it's known to exist
+        const { error: uploadError } = await supabase.storage
+          .from('card-photos')
+          .upload(path, file, { contentType: file.type });
+          
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('card-photos').getPublicUrl(path);
+          const url = urlData.publicUrl;
+          if (i === 0) coverPhotoUrl = url;
+          
+          await supabase.from('listing_photos').insert({
+            listing_id: listing.id,
+            url,
+            sort_order: i
+          });
+        } else {
+          console.error("Failed to upload photo:", uploadError);
+        }
+      }
+      
+      if (coverPhotoUrl) {
+        await supabase.from('listings').update({ cover_photo_url: coverPhotoUrl }).eq('id', listing.id);
+      }
 
       // Now insert listing_items
       for (const card of selectedCards) {
@@ -159,6 +203,26 @@ export default function NewListingPage() {
             placeholder="Describe your cards, any flaws, or what you are looking for..."
             style={{ height: 100, resize: 'vertical' }}
           />
+
+          <label className="login-field-label">Photos</label>
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+              {photoPreviews.map((src, i) => (
+                <div key={i} style={{ position: 'relative', width: 80, height: 80, borderRadius: 6, overflow: 'hidden', border: '1px solid #e5e5e5' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <button 
+                    onClick={(e) => { e.preventDefault(); removePhoto(i); }}
+                    style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >✕</button>
+                </div>
+              ))}
+              <label style={{ width: 80, height: 80, borderRadius: 6, border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#fafafa', color: '#888', fontSize: 24 }}>
+                +
+                <input type="file" multiple accept="image/*" onChange={handlePhotoSelect} style={{ display: 'none' }} />
+              </label>
+            </div>
+          </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <div>

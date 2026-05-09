@@ -29,7 +29,12 @@ export default function LoginModal({ onClose, onSuccess }: Props) {
     }
     setError('');
     setLoading(true);
-    const supabase = createClient()!;
+    const supabase = createClient();
+    if (!supabase) {
+      setError('Auth service is starting – please try again in a moment.');
+      setLoading(false);
+      return;
+    }
     try {
       if (isSignUp) {
         const { error: err } = await supabase.auth.signUp({ email, password });
@@ -60,7 +65,12 @@ export default function LoginModal({ onClose, onSuccess }: Props) {
     }
     setLoading(true);
     setError('');
-    const supabase = createClient()!;
+    const supabase = createClient();
+    if (!supabase) {
+      setError('Auth service is starting – please try again in a moment.');
+      setLoading(false);
+      return;
+    }
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback` },
