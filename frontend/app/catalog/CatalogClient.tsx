@@ -98,12 +98,14 @@ export default function CatalogClient({ cards }: Props) {
       setAddingCard(null);
       return;
     }
-    const { error } = await supabase.from('user_cards').upsert(
+    const { data: inserted, error } = await supabase.from('user_cards').upsert(
       { user_id: user.id, catalog_card_id: addingCard.id, condition, quantity, for_trade: false, wanted: false },
       { onConflict: 'user_id,catalog_card_id,condition' }
-    );
+    ).select('id');
     if (error) {
       showToast('Could not add card — ' + error.message, false);
+    } else if (!inserted || inserted.length === 0) {
+      showToast('Could not add card — permission denied. Check your account.', false);
     } else {
       setAdded((s) => { const next = new Set(s); next.add(addingCard.id); return next; });
       showToast(`${addingCard.name} added to your collection!`);

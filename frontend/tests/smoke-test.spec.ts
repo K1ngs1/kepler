@@ -154,13 +154,9 @@ test('Kepler Smoke Test – Two-User Full Lifecycle', async ({ browser }) => {
   /*  3. CATALOG & COLLECTION                                        */
   /* ============================================================== */
   await test.step('3a. UserA adds a card from catalog to collection', async () => {
-    // Listen for all Supabase API errors during this step
-    const apiErrors: string[] = [];
-    pageA.on('response', async (resp) => {
-      if (resp.url().includes('supabase.co') && resp.status() >= 400) {
-        const body = await resp.text().catch(() => '');
-        apiErrors.push(`${resp.request().method()} ${resp.url()} → ${resp.status()}: ${body}`);
-      }
+    // Log all POST requests to identify the add-to-collection endpoint
+    pageA.on('request', (req) => {
+      if (req.method() === 'POST') console.log('  POST request:', req.url());
     });
 
     await pageA.goto(`${BASE}/catalog`);
@@ -168,6 +164,10 @@ test('Kepler Smoke Test – Two-User Full Lifecycle', async ({ browser }) => {
 
     const cards = pageA.locator('.catalog-card');
     expect(await cards.count()).toBeGreaterThan(0);
+
+    // Capture the card name before adding so we can verify it in the collection
+    cardNameA = (await pageA.locator('.catalog-card').first().locator('h3, .catalog-card-name, strong').first().textContent()) ?? '';
+    console.log(`  Card to add: "${cardNameA}"`);
 
     const addBtn = pageA.locator('.catalog-card-add').first();
     await addBtn.scrollIntoViewIfNeeded();
@@ -184,48 +184,38 @@ test('Kepler Smoke Test – Two-User Full Lifecycle', async ({ browser }) => {
       await qtyInput.fill('1');
     }
 
-    await pageA.locator('.modal-confirm').click();
-    await expect(pageA.locator('text=added to your collection')).toBeVisible({ timeout: 8000 });
+    // Wait for the POST that persists the card, then click confirm
+    const [addResp] = await Promise.all([
+      pageA.waitForResponse(
+        (resp) =>
+          resp.request().method() === 'POST' &&
+          (resp.url().includes('/rest/v1/user_cards') || resp.url().includes('user_cards')),
+        { timeout: 15000 }
+      ),
+      pageA.locator('.modal-confirm').click(),
+    ]);
 
-    // Wait a moment for any async API calls to complete
-    await pageA.waitForTimeout(2000);
-
-    // Report any Supabase API errors that occurred
-    if (apiErrors.length > 0) {
-      console.log('=== Supabase API errors during step 3a ===');
-      apiErrors.forEach((e) => console.log('  ', e));
-      console.log('===========================================');
+    const addStatus = addResp.status();
+    const addBody = await addResp.text().catch(() => '');
+    console.log(`  Supabase upsert: HTTP ${addStatus} — ${addBody.substring(0, 300)}`);
+    if (addStatus >= 400) {
+      throw new Error(`Add-to-collection failed: HTTP ${addStatus}: ${addBody}`);
     }
+
+    await expect(pageA.locator('text=added to your collection')).toBeVisible({ timeout: 8000 });
   });
 
   await test.step('3b. UserA verifies card in collection and marks "For Trade"', async () => {
-    // Listen for page errors and console errors
-    pageA.on('pageerror', (err) => console.error('PAGE ERROR:', err.message));
-    pageA.on('console', (msg) => {
-      if (msg.type() === 'error') console.error('CONSOLE ERROR:', msg.text());
-    });
-
-    // Navigate to collection (SSR may return empty due to stale session)
-    await pageA.goto(`${BASE}/collection`);
-
-    // Force a client-side hard navigation to discard SSR cache and trigger a fresh client fetch
-    await pageA.evaluate(() => window.location.href = window.location.href);
-    await pageA.waitForLoadState('networkidle');
-
-    // --- BEGIN DEBUG ---
-    console.log('Current URL:', pageA.url());
-    await pageA.screenshot({ path: 'debug-before-assert.png', fullPage: true });
-    console.log('Page title:', await pageA.title());
-
-    const cardCount = await pageA.locator('.collection-card').count();
-    console.log('Number of .collection-card elements found:', cardCount);
-
-    if (cardCount === 0) {
-      console.log('Body text snippet:', (await pageA.textContent('body'))?.substring(0, 500));
-    }
-    // --- END DEBUG ---
-
-    await expect(pageA.locator('.collection-card').first()).toBeVisible({ timeout: 20000 });
+    // Retry navigation — auth state may not restore from localStorage on the first render
+    await expect(async () => {
+      await pageA.goto(`${BASE}/collection`);
+      await pageA.waitForLoadState('networkidle');
+      // Fail the retry if we see sign-in prompt or empty state (auth not ready)
+      const signIn = await pageA.locator('text=Sign in to see your collection').isVisible().catch(() => false);
+      const empty = await pageA.locator('text=Your collection is empty').isVisible().catch(() => false);
+      if (signIn || empty) throw new Error('Auth not ready or collection empty');
+      await expect(pageA.locator('.collection-card').first()).toBeVisible({ timeout: 3000 });
+    }).toPass({ timeout: 30000, intervals: [2000, 3000, 5000] });
 
     cardNameA = (await pageA.locator('.collection-card-name').first().textContent()) ?? '';
     console.log(`  UserA card: "${cardNameA}"`);
@@ -247,6 +237,11 @@ test('Kepler Smoke Test – Two-User Full Lifecycle', async ({ browser }) => {
     const addBtns = pageB.locator('.catalog-card-add');
     const count = await addBtns.count();
     const idx = count > 1 ? 1 : 0;
+
+    // Capture the card name before adding
+    cardNameB = (await pageB.locator('.catalog-card').nth(idx).locator('h3, .catalog-card-name, strong').first().textContent()) ?? '';
+    console.log(`  Card to add B: "${cardNameB}"`);
+
     await addBtns.nth(idx).scrollIntoViewIfNeeded();
     await addBtns.nth(idx).click();
 
@@ -257,16 +252,35 @@ test('Kepler Smoke Test – Two-User Full Lifecycle', async ({ browser }) => {
       await condSelect.selectOption({ index: 2 });
     }
 
-    await pageB.locator('.modal-confirm').click();
+    // Wait for the POST that persists the card, then click confirm
+    const [addRespB] = await Promise.all([
+      pageB.waitForResponse(
+        (resp) =>
+          resp.request().method() === 'POST' &&
+          (resp.url().includes('/rest/v1/user_cards') || resp.url().includes('user_cards')),
+        { timeout: 15000 }
+      ),
+      pageB.locator('.modal-confirm').click(),
+    ]);
+
+    const addStatusB = addRespB.status();
+    const addBodyB = await addRespB.text().catch(() => '');
+    console.log(`  Supabase upsert B: HTTP ${addStatusB} — ${addBodyB.substring(0, 300)}`);
+    if (addStatusB >= 400) {
+      throw new Error(`Add-to-collection failed for UserB: HTTP ${addStatusB}: ${addBodyB}`);
+    }
+
     await expect(pageB.locator('text=added to your collection')).toBeVisible({ timeout: 8000 });
 
-    await pageB.goto(`${BASE}/collection`);
-
-    // Force a client-side hard navigation to discard SSR cache and trigger a fresh client fetch
-    await pageB.evaluate(() => window.location.href = window.location.href);
-    await pageB.waitForLoadState('networkidle');
-
-    await expect(pageB.locator('.collection-card').first()).toBeVisible({ timeout: 20000 });
+    // Retry navigation — auth state may not restore from localStorage on the first render
+    await expect(async () => {
+      await pageB.goto(`${BASE}/collection`);
+      await pageB.waitForLoadState('networkidle');
+      const signIn = await pageB.locator('text=Sign in to see your collection').isVisible().catch(() => false);
+      const empty = await pageB.locator('text=Your collection is empty').isVisible().catch(() => false);
+      if (signIn || empty) throw new Error('Auth not ready or collection empty');
+      await expect(pageB.locator('.collection-card').first()).toBeVisible({ timeout: 3000 });
+    }).toPass({ timeout: 30000, intervals: [2000, 3000, 5000] });
 
     cardNameB = (await pageB.locator('.collection-card-name').first().textContent()) ?? '';
     console.log(`  UserB card: "${cardNameB}"`);

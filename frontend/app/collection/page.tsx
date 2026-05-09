@@ -13,7 +13,6 @@ interface CollectionCard {
   quantity: number;
   for_trade: boolean;
   wanted: boolean;
-  photo_url: string | null;
   catalog_cards: {
     id: string;
     name: string;
@@ -40,8 +39,10 @@ export default function CollectionPage() {
     const supabase = createClient();
     if (!supabase) { setLoading(false); return; }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); setAuthed(false); return; }
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError) console.error('[Collection] auth error:', authError.message);
+    if (!user) { console.warn('[Collection] No user — not authenticated'); setLoading(false); setAuthed(false); return; }
+    console.log('[Collection] Authenticated as:', user.id, user.email);
     setAuthed(true);
     setCurrentUserId(user.id);
 
@@ -49,14 +50,18 @@ export default function CollectionPage() {
     const { data: profile } = await supabase.from('profiles').select('username').eq('id', user.id).single();
     if (profile?.username) setUsername(profile.username);
 
-    const { data } = await supabase
+    const { data, error: fetchError } = await supabase
       .from('user_cards')
-      .select('id, condition, quantity, for_trade, wanted, photo_url, catalog_cards(id, name, set_name, number, rarity, image_url)')
+      .select('id, condition, quantity, for_trade, wanted, catalog_cards(id, name, set_name, number, rarity, image_url)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
+    if (fetchError) console.error('[Collection] fetch error:', fetchError.message);
+    console.log('[Collection] Raw user_cards rows:', data?.length, JSON.stringify(data?.slice(0, 3)));
+
     // Filter out any rows where the catalog_cards join returned null
     const rows = ((data as unknown as CollectionCard[]) ?? []).filter((c) => c.catalog_cards != null);
+    console.log('[Collection] After filtering (catalog_cards != null):', rows.length);
     setCollection(rows);
     setLoading(false);
   }, []);
@@ -254,7 +259,7 @@ export default function CollectionPage() {
                 <div className="collection-card-img">
                   <CardImage
                     officialUrl={card.catalog_cards.image_url}
-                    photoUrl={card.photo_url}
+                    photoUrl={null}
                     alt={card.catalog_cards.name}
                   />
                 </div>
@@ -265,8 +270,8 @@ export default function CollectionPage() {
                       <PhotoUpload
                         userCardId={card.id}
                         userId={currentUserId}
-                        currentPhotoUrl={card.photo_url}
-                        onUploaded={(url) => setCollection((prev) => prev.map((c) => c.id === card.id ? { ...c, photo_url: url } : c))}
+                        currentPhotoUrl={null}
+                        onUploaded={() => {}}
                       />
                     )}
                   </div>
