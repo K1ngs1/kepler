@@ -1,17 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { parseAbi, formatUnits } from 'viem';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
+import { useState, useMemo, useEffect } from 'react';
+import { parseUnits } from 'viem';
+import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { createClient } from '@/lib/supabase/client';
-import { USDC_DECIMALS } from '@/lib/web3/usdc';
-import { USDC_ADDRESS } from '@/lib/web3/config';
-
-const abi = parseAbi([
-  'function transfer(address to, uint256 amount) returns (bool)',
-  'function balanceOf(address account) view returns (uint256)',
-]);
 
 const MERCHANT_WALLET = process.env.NEXT_PUBLIC_MERCHANT_WALLET as `0x${string}` | undefined;
 
@@ -57,20 +50,8 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
 
   const [offerAmount, setOfferAmount] = useState(calculatedTotal.toString());
 
-  // Read USDC balance
-  const { data: rawBalance } = useReadContract({
-    address: USDC_ADDRESS as `0x${string}`,
-    abi,
-    functionName: 'balanceOf',
-    args: address ? [address] : undefined,
-    query: { enabled: !!address },
-  });
-  const usdcBalance = rawBalance != null
-    ? parseFloat(formatUnits(rawBalance as bigint, USDC_DECIMALS))
-    : null;
-
-  // Write contract hook
-  const { writeContract, data: txHash, isPending: isSigning, error: writeError } = useWriteContract();
+  // Send native transaction hook (USDC is native on Arc)
+  const { sendTransaction, data: txHash, isPending: isSigning, error: writeError } = useSendTransaction();
 
   // Wait for receipt
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
@@ -89,20 +70,24 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
   }, [txStage, isConfirmed, isConfirming, txHash, isSigning]);
 
   // Verify payment on backend when confirmed
-  if (isConfirmed && txHash && offerId && txStage !== 'confirmed') {
-    setTxStage('confirmed');
-    const supabase = createClient();
-    if (supabase) {
-      supabase.functions.invoke('polygon-verify', {
-        body: { purchase_offer_id: offerId, tx_hash: txHash },
-      }).catch((err) => console.error('Verification error:', err));
+  useEffect(() => {
+    if (isConfirmed && txHash && offerId && txStage !== 'confirmed') {
+      setTxStage('confirmed');
+      const supabase = createClient();
+      if (supabase) {
+        supabase.functions.invoke('polygon-verify', {
+          body: { purchase_offer_id: offerId, tx_hash: txHash },
+        }).catch((err) => console.error('Verification error:', err));
+      }
     }
-  }
+  }, [isConfirmed, txHash, offerId, txStage]);
 
-  if (writeError && txStage !== 'error') {
-    setTxStage('error');
-    setError(writeError.message.split('\n')[0]);
-  }
+  useEffect(() => {
+    if (writeError && txStage !== 'error') {
+      setTxStage('error');
+      setError(writeError.message.split('\n')[0]);
+    }
+  }, [writeError, txStage]);
 
   const handleToggle = (id: string) => {
     setSelectedItemIds((prev) => {
@@ -131,11 +116,6 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
       setError('Merchant wallet is not configured.');
       return;
     }
-    if (usdcBalance !== null && amount > usdcBalance) {
-      setError(`Insufficient USDC balance. You have ${usdcBalance.toFixed(2)} USDC.`);
-      return;
-    }
-
     setError('');
     setTxStage('wallet');
 
@@ -170,16 +150,13 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
       if (insertError) throw insertError;
       setOfferId(data.id);
 
-      // 2. Trigger USDC transfer to merchant wallet
-      const amountInUnits = BigInt(Math.round(amount * 10 ** USDC_DECIMALS));
-      writeContract({
-        address: USDC_ADDRESS as `0x${string}`,
-        abi,
-        functionName: 'transfer',
-        args: [MERCHANT_WALLET, amountInUnits],
+      // 2. Send native USDC transfer (USDC is native gas token on Arc)
+      const amountInWei = parseUnits(amount.toString(), 18);
+      sendTransaction({
+        to: MERCHANT_WALLET,
+        value: amountInWei,
       });
     } catch (err: any) {
-      console.error(err);
       setError(err.message || 'Something went wrong.');
       setTxStage('error');
     }
@@ -189,7 +166,7 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
 
   const explorerBase = process.env.NEXT_PUBLIC_CHAIN === 'mainnet'
     ? 'https://polygonscan.com/tx/'
-    : 'https://amoy.polygonscan.com/tx/';
+    : 'https://testnet.arcscan.app/tx/';
 
   return (
     <div className="modal-bg" onClick={isProcessing ? undefined : onClose}>
@@ -197,7 +174,7 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
         <button className="login-close" onClick={onClose} disabled={isProcessing}>×</button>
         <div className="login-logo">Kepler</div>
         <div className="login-heading">Buy Cards</div>
-        <div className="login-sub">Select the cards you want to purchase with USDC on Polygon.</div>
+        <div className="login-sub">Select the cards you want to purchase with USDC.</div>
 
         {error && <div className="auth-error" style={{ marginBottom: 14 }}>{error}</div>}
 
@@ -232,14 +209,6 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, price
                   {address?.slice(0, 6)}…{address?.slice(-4)}
                 </span>
               </div>
-              {usdcBalance !== null && (
-                <span style={{
-                  display: 'inline-block', fontSize: 11, color: '#555',
-                  background: '#f0f0f0', borderRadius: 12, padding: '3px 10px',
-                }}>
-                  {usdcBalance.toFixed(2)} USDC
-                </span>
-              )}
             </div>
 
             {/* Card selection */}

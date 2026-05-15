@@ -1,9 +1,6 @@
-export const USDC_ADDRESS_MAINNET = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // Polygon native USDC
-// Polygon Amoy does not have a public USDC faucet; using mainnet address as placeholder
-export const USDC_ADDRESS_AMOY = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359';
-export const USDC_ABI = [
-  'function transfer(address to, uint256 amount) returns (bool)',
-  'function balanceOf(address account) view returns (uint256)',
-  'function decimals() view returns (uint8)',
-] as const;
+export const USDC_ADDRESS_MAINNET = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'; // Polygon PoS native USDC
+export const USDC_ADDRESS_AMOY = '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582';   // Polygon Amoy testnet USDC
+
+// Arc Testnet USDC — system contract providing ERC-20 interface for native USDC.
+export const USDC_ADDRESS_ARC = '0x3600000000000000000000000000000000000000';
 export const USDC_DECIMALS = 6;

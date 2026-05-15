@@ -225,8 +225,9 @@ test('Kepler Smoke Test – Two-User Full Lifecycle', async ({ browser }) => {
       .locator('.toggle-row')
       .filter({ hasText: 'For Trade' })
       .first()
-      .locator('input[type="checkbox"]');
-    await forTradeToggle.check({ force: true });
+      .locator('.toggle-slider');
+    await forTradeToggle.scrollIntoViewIfNeeded();
+    await forTradeToggle.click();
     await pageA.waitForTimeout(800);
   });
 
@@ -290,8 +291,9 @@ test('Kepler Smoke Test – Two-User Full Lifecycle', async ({ browser }) => {
       .locator('.toggle-row')
       .filter({ hasText: 'For Trade' })
       .first()
-      .locator('input[type="checkbox"]');
-    await forTradeToggle.check({ force: true });
+      .locator('.toggle-slider');
+    await forTradeToggle.scrollIntoViewIfNeeded();
+    await forTradeToggle.click();
     await pageB.waitForTimeout(800);
   });
 

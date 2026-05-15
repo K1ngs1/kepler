@@ -138,7 +138,7 @@ export default function DepositSection({ tradeId, depositAmount, initiatorLocked
 
   const explorerBase = process.env.NEXT_PUBLIC_CHAIN === 'mainnet'
     ? 'https://polygonscan.com/tx/'
-    : 'https://amoy.polygonscan.com/tx/';
+    : 'https://testnet.arcscan.app/tx/';
 
   return (
     <div style={{ marginTop: 24, padding: 16, border: '1px solid #ebebeb', borderRadius: 8, background: '#fafafa' }}>
