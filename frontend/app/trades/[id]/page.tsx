@@ -29,6 +29,17 @@ interface RequestedItem {
   custom_price: number | null;
 }
 
+interface ShippingAddr {
+  id: string;
+  user_id: string;
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
+}
+
 interface Trade {
   id: string;
   status: string;
@@ -43,15 +54,22 @@ interface Trade {
   deposit_amount?: number | null;
   initiator_deposit_locked?: boolean;
   recipient_deposit_locked?: boolean;
+  middleman_id?: string | null;
+  middleman_status?: string | null;
+  middleman_fee?: number | null;
+  middleman_confirmed?: boolean;
+  middleman_requested_by?: string[] | null;
+  tracking_number?: string | null;
   created_at: string;
   updated_at: string;
   initiator: { username: string | null; reputation_score: number | null } | null;
   recipient: { username: string | null; reputation_score: number | null } | null;
 }
 
-const TIMELINE_STEPS = ['proposed', 'accepted', 'completed'];
+const TIMELINE_STEPS_BASIC = ['proposed', 'accepted', 'completed'];
+const TIMELINE_STEPS_MIDDLEMAN = ['proposed', 'inspection', 'accepted', 'completed'];
 
-function TradeTimeline({ status }: { status: string }) {
+function TradeTimeline({ status, hasMiddleman }: { status: string; hasMiddleman: boolean }) {
   if (status === 'cancelled') {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20 }}>
@@ -60,14 +78,15 @@ function TradeTimeline({ status }: { status: string }) {
       </div>
     );
   }
-  const currentIdx = TIMELINE_STEPS.indexOf(status === 'countered' ? 'proposed' : status);
+  const steps = hasMiddleman ? TIMELINE_STEPS_MIDDLEMAN : TIMELINE_STEPS_BASIC;
+  const currentIdx = steps.indexOf(status === 'countered' ? 'proposed' : status);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 20 }}>
-      {TIMELINE_STEPS.map((step, i) => {
+      {steps.map((step, i) => {
         const done = i <= currentIdx;
         const active = i === currentIdx;
         return (
-          <div key={step} style={{ display: 'flex', alignItems: 'center', flex: i < TIMELINE_STEPS.length - 1 ? 1 : 'none' }}>
+          <div key={step} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : 'none' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
               <div style={{
                 width: 28, height: 28, borderRadius: '50%',
@@ -86,7 +105,7 @@ function TradeTimeline({ status }: { status: string }) {
                 {step}
               </span>
             </div>
-            {i < TIMELINE_STEPS.length - 1 && (
+            {i < steps.length - 1 && (
               <div style={{ flex: 1, height: 2, background: i < currentIdx ? '#111' : '#e5e5e5', margin: '0 4px', marginBottom: 18, transition: 'background 0.2s' }} />
             )}
           </div>
@@ -138,6 +157,9 @@ export default function TradeDetailPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [rated, setRated] = useState(false);
+  const [middlemanRequested, setMiddlemanRequested] = useState(false);
+  const [shippingAddresses, setShippingAddresses] = useState<ShippingAddr[]>([]);
+  const [shippingLoading, setShippingLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const showToast = (msg: string, ok = true) => {
@@ -164,6 +186,8 @@ export default function TradeDetailPage() {
           .single();
         if (data) {
           setTrade(data as unknown as Trade);
+          const requestedBy: string[] = data.middleman_requested_by || [];
+          setMiddlemanRequested(requestedBy.includes(user.id));
 
           // Load requested listing items if we have item IDs
           const itemIds = data.requested_listing_item_ids;
@@ -174,7 +198,24 @@ export default function TradeDetailPage() {
               .in('id', itemIds);
             if (items) setRequestedItems(items as unknown as RequestedItem[]);
           }
+
+          // Load shipping addresses if trade is in an appropriate state
+          if (['accepted', 'inspection', 'completed'].includes(data.status)) {
+            loadShippingAddresses();
+          }
         }
+      };
+
+      const loadShippingAddresses = async () => {
+        setShippingLoading(true);
+        try {
+          const resp = await fetch(`/api/shipping/${id}`);
+          if (resp.ok) {
+            const json = await resp.json();
+            setShippingAddresses(json.addresses || []);
+          }
+        } catch { /* ignore */ }
+        setShippingLoading(false);
       };
 
       const loadMessages = async () => {
@@ -221,20 +262,56 @@ export default function TradeDetailPage() {
     else setMsgInput('');
   };
 
+  const MIDDLEMAN_ID = process.env.NEXT_PUBLIC_MIDDLEMAN_ID || null;
+
   const RPC_LABELS: Record<string, string> = {
     accept_trade: 'Trade accepted!',
     cancel_trade: 'Trade cancelled.',
     complete_trade: 'Receipt confirmed!',
   };
 
-  const rpc = async (fn: string) => {
+  const rpc = async (fn: string, extraParams?: Record<string, unknown>) => {
     setActionLoading(true);
     const supabase = createClient();
     if (!supabase) return;
-    const { error } = await supabase.rpc(fn, { p_trade_id: id });
+    const { error } = await supabase.rpc(fn, { p_trade_id: id, ...extraParams });
     if (error) showToast(error.message, false);
     else showToast(RPC_LABELS[fn] ?? 'Done!');
     setActionLoading(false);
+  };
+
+  const handleMiddlemanToggle = async () => {
+    if (!userId || !trade) return;
+    const supabase = createClient();
+    if (!supabase) return;
+
+    const currentRequests: string[] = trade.middleman_requested_by || [];
+    let newRequests: string[];
+    let updates: Record<string, unknown> = {};
+
+    if (currentRequests.includes(userId)) {
+      // Remove request
+      newRequests = currentRequests.filter(u => u !== userId);
+      setMiddlemanRequested(false);
+    } else {
+      // Add request
+      newRequests = [...currentRequests, userId];
+      setMiddlemanRequested(true);
+    }
+
+    updates.middleman_requested_by = newRequests;
+
+    // If both parties have requested, assign the middleman
+    const bothRequested = newRequests.includes(trade.initiator_id) && newRequests.includes(trade.recipient_id);
+    if (bothRequested && MIDDLEMAN_ID) {
+      updates.middleman_id = MIDDLEMAN_ID;
+      updates.middleman_fee = (trade.deposit_amount || 0) * 0.05; // 5% fee
+    } else if (!bothRequested) {
+      updates.middleman_id = null;
+      updates.middleman_fee = 0;
+    }
+
+    await supabase.from('trade_offers').update(updates).eq('id', trade.id);
   };
 
   const handleRate = async (rating: number) => {
@@ -293,7 +370,7 @@ export default function TradeDetailPage() {
         </div>
 
         {/* Timeline */}
-        <TradeTimeline status={trade.status} />
+        <TradeTimeline status={trade.status} hasMiddleman={!!trade.middleman_id} />
 
         <div className="trade-detail-grid">
           {/* Left: trade items + actions */}
@@ -369,6 +446,73 @@ export default function TradeDetailPage() {
               </div>
             )}
 
+            {/* Middleman request checkbox (only before acceptance) */}
+            {(isInitiator || isRecipient) && ['proposed', 'countered'].includes(trade.status) && MIDDLEMAN_ID && (
+              <div style={{ marginTop: 12, padding: '10px 12px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fafafa' }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={middlemanRequested}
+                    onChange={handleMiddlemanToggle}
+                    style={{ marginTop: 2, accentColor: '#111', width: 14, height: 14, flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Request Middleman</div>
+                    <div style={{ fontSize: 11.5, color: '#888', marginTop: 2 }}>
+                      A trusted middleman will verify items before completing the trade.
+                      {trade.middleman_id ? (
+                        <span style={{ display: 'block', marginTop: 3, color: '#3db56c', fontWeight: 600 }}>Both parties agreed — middleman assigned.</span>
+                      ) : (
+                        <span style={{ display: 'block', marginTop: 3, color: '#e5a000' }}>
+                          Both parties must agree.
+                          {(() => {
+                            const reqs = trade.middleman_requested_by || [];
+                            const otherRequested = isInitiator ? reqs.includes(trade.recipient_id) : reqs.includes(trade.initiator_id);
+                            if (middlemanRequested && !otherRequested) return ' Waiting for the other party…';
+                            if (!middlemanRequested && otherRequested) return ' The other party has requested a middleman.';
+                            return '';
+                          })()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {/* Middleman status display (during inspection) */}
+            {trade.status === 'inspection' && trade.middleman_id && (
+              <div style={{ marginTop: 12, padding: '10px 12px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fafafa' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#111', marginBottom: 4 }}>Middleman Inspection</div>
+                <div style={{ fontSize: 12, color: '#555' }}>
+                  Status: <span className="trade-status-chip" style={{ fontSize: 11, background: '#fff3cd', color: '#856404' }}>{trade.middleman_status || 'pending'}</span>
+                </div>
+                <div style={{ fontSize: 11.5, color: '#888', marginTop: 6 }}>
+                  The middleman is inspecting the items. The trade will move to &quot;accepted&quot; once verification and shipping are complete.
+                </div>
+              </div>
+            )}
+
+            {/* Middleman actions (only visible to the middleman user) */}
+            {trade.status === 'inspection' && trade.middleman_id === userId && (
+              <div style={{ marginTop: 12, padding: '12px', border: '1px solid #cce5ff', borderRadius: 6, background: '#f0f7ff' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#004085', marginBottom: 8 }}>Middleman Actions</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {['received', 'verified', 'shipped'].map((s) => (
+                    <button
+                      key={s}
+                      className="btn-outline-ext"
+                      style={{ width: 'auto', padding: '7px 14px', fontSize: 12, marginTop: 0, textTransform: 'capitalize' }}
+                      disabled={actionLoading}
+                      onClick={() => rpc('update_middleman_status', { p_status: s })}
+                    >
+                      Mark as {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Action buttons */}
             {trade.status !== 'completed' && trade.status !== 'cancelled' && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
@@ -396,7 +540,7 @@ export default function TradeDetailPage() {
             )}
 
             {/* Security Deposit Section */}
-            {(trade.status === 'accepted' || trade.status === 'completed') && (
+            {(trade.status === 'accepted' || trade.status === 'completed' || trade.status === 'inspection') && (
               <DepositSection
                 tradeId={trade.id}
                 depositAmount={trade.deposit_amount ?? null}
@@ -404,7 +548,46 @@ export default function TradeDetailPage() {
                 recipientLocked={trade.recipient_deposit_locked ?? false}
                 isInitiator={isInitiator}
                 partnerName={partnerName}
+                middlemanId={trade.middleman_id}
+                middlemanStatus={trade.middleman_status}
+                middlemanFee={trade.middleman_fee}
+                middlemanConfirmed={trade.middleman_confirmed}
               />
+            )}
+
+            {/* Shipping Info Section */}
+            {['accepted', 'inspection', 'completed'].includes(trade.status) && (isInitiator || isRecipient) && (
+              <div style={{ marginTop: 24, padding: 16, border: '1px solid #ebebeb', borderRadius: 8, background: '#fafafa' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: '#111' }}>
+                  Shipping Info
+                </div>
+                <div style={{ fontSize: 12, color: '#555', marginBottom: 12 }}>
+                  {`Ship items to your trade partner's address below.`}
+                </div>
+                {shippingLoading ? (
+                  <div style={{ fontSize: 12, color: '#aaa' }}>Loading address…</div>
+                ) : shippingAddresses.length > 0 ? (
+                  shippingAddresses.map((addr) => (
+                    <div key={addr.id} style={{ padding: '10px 12px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fff', marginBottom: 6 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{addr.name}</div>
+                      <div style={{ fontSize: 12, color: '#555', marginTop: 2, lineHeight: 1.5 }}>
+                        {addr.street}<br />
+                        {addr.city}, {addr.state} {addr.zip}<br />
+                        {addr.country}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ fontSize: 12, color: '#999' }}>
+                    No shipping address on file. Ask your trade partner to add one in Settings.
+                  </div>
+                )}
+                {trade.tracking_number && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: '#555' }}>
+                    Tracking: <span style={{ fontFamily: 'monospace', color: '#333', fontWeight: 600 }}>{trade.tracking_number}</span>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Star rating */}
@@ -449,7 +632,7 @@ export default function TradeDetailPage() {
               })}
               <div ref={bottomRef} />
             </div>
-            {trade.status !== 'completed' && trade.status !== 'cancelled' && (
+            {!['completed', 'cancelled'].includes(trade.status) && (
               <div style={{ padding: '10px 14px', borderTop: '1px solid #e5e5e5', display: 'flex', gap: 8 }}>
                 <input
                   className="login-field-input"
