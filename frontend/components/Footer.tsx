@@ -13,10 +13,8 @@ export default function Footer() {
         <div>
           <div className="footer-col-title">Marketplace</div>
           <div className="footer-links">
-            <Link href="/auctions">Auctions</Link>
-            <Link href="/catalog">Card Catalog</Link>
-            <a>Private Sales</a>
-            <a>Results</a>
+            <Link href="/listings">Listings</Link>
+            <Link href="/trades">Offers</Link>
           </div>
         </div>
         <div>
@@ -32,7 +30,6 @@ export default function Footer() {
           <div className="footer-col-title">Company</div>
           <div className="footer-links">
             <a>About Kepler</a>
-            <Link href="/analytics">Analytics</Link>
             <a>Careers</a>
             <a>Contact</a>
           </div>

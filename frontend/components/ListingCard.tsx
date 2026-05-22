@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import PriceBadge from '@/components/PriceBadge';
 
 interface Listing {
   id: string;

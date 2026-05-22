@@ -60,10 +60,6 @@ export default function ListingsPage() {
           </Link>
         </div>
 
-        <div style={{ display: 'flex', gap: 16, marginBottom: 24, borderBottom: '1px solid #e5e5e5', paddingBottom: 16 }}>
-          <Link href="/auctions" style={{ fontSize: 14, color: '#777', textDecoration: 'none', fontWeight: 600 }}>Individual Cards</Link>
-          <Link href="/listings" style={{ fontSize: 14, color: '#111', textDecoration: 'none', fontWeight: 700, borderBottom: '2px solid #111', paddingBottom: 16, marginBottom: -17 }}>Collections & Lots</Link>
-        </div>
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: '80px 0', color: '#aaa', fontSize: 13 }}>Loading listings...</div>

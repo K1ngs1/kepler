@@ -1,14 +1,3 @@
-export interface HeroSlide {
-  eyebrow: string;
-  big: string;
-  big2: string;
-  boxed: string;
-  meta1: string;
-  meta2: string;
-  cta: string;
-  bg: string;
-}
-
 export interface Auction {
   id: number;
   title: string;

@@ -4,13 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 const COMMANDS = [
-  { label: 'Go to Collection', shortcut: '', href: '/collection' },
-  { label: 'Go to Trades', shortcut: '', href: '/trades' },
-  { label: 'Go to Wishlist', shortcut: '', href: '/wishlist' },
-  { label: 'Go to Catalog', shortcut: '', href: '/catalog' },
-  { label: 'Cards For Trade', shortcut: '', href: '/auctions' },
-  { label: 'Propose a Trade', shortcut: '', href: '/trades/new' },
-  { label: 'Analytics', shortcut: '', href: '/analytics' },
+  { label: 'Go to Listings', shortcut: '', href: '/listings' },
+  { label: 'Go to Offers', shortcut: '', href: '/trades' },
+  { label: 'Create Listing', shortcut: '', href: '/listings/new' },
 ];
 
 interface Props {

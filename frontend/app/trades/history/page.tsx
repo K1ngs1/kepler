@@ -65,7 +65,7 @@ export default function TradeHistoryPage() {
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px' }}>
         <div className="listing-toolbar">
           <div className="listing-title">Trade History</div>
-          <a href="/trades" style={{ fontSize: 13, color: '#777', textDecoration: 'none' }}>← Active Trades</a>
+          <a href="/trades" style={{ fontSize: 13, color: '#777', textDecoration: 'none' }}>← Active Offers</a>
         </div>
 
         <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #e5e5e5', marginBottom: 20 }}>

@@ -12,15 +12,17 @@ export async function GET(
     return NextResponse.json({ error: 'Server not configured.' }, { status: 500 });
   }
 
-  // Service key bypasses RLS so we can see all cards in the trade
-  // regardless of their for_trade status or owner
   const supabase = createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false },
   });
 
+  // For MVP trades, the trade detail page reads offered_cards and
+  // requested_listing_item_ids directly from trade_offers.
+  // This endpoint is kept for backward compatibility with any legacy
+  // trades that used the trade_items table.
   const { data, error } = await supabase
     .from('trade_items')
-    .select('id, direction, user_card_id, user_cards(condition, photo_url, catalog_card_id, catalog_cards(name, set_name, number, image_url))')
+    .select('id, direction, user_card_id, user_cards(condition, catalog_card_id, catalog_cards(name, set_name, number, image_url))')
     .eq('trade_id', params.tradeId);
 
   if (error) {

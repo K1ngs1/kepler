@@ -81,26 +81,15 @@ export default function Nav({ user: initialUser }: NavProps) {
         </div>
         <button className="nav-hamburger" style={{ display: 'none' }} onClick={() => setMenuOpen(!menuOpen)}>☰</button>
         <div className={menuOpen ? 'nav-right open' : 'nav-right'}>
-          <Link href="/auctions" className={`nav-item${pathname === '/auctions' ? ' active' : ''}`}>
-            Trade
-            <svg width="10" height="10" viewBox="0 0 10 7" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M1 1.5l4 4 4-4" /></svg>
-          </Link>
-          <Link href="/catalog" className={`nav-item${pathname === '/catalog' ? ' active' : ''}`}>
-            Catalog
-          </Link>
-          <Link href="/collection" className={`nav-item${pathname === '/collection' ? ' active' : ''}`}>
-            My Collection
+          <Link href="/listings" className={`nav-item${pathname === '/listings' || pathname === '/auctions' ? ' active' : ''}`}>
+            Listings
           </Link>
           <Link href="/trades" className={`nav-item${pathname?.startsWith('/trades') ? ' active' : ''}`} style={{ position: 'relative' }}>
-            Trades
+            Offers
             {unreadTrades > 0 && (
               <span className="nav-badge">{unreadTrades > 9 ? '9+' : unreadTrades}</span>
             )}
           </Link>
-          <Link href="/wishlist" className={`nav-item${pathname === '/wishlist' ? ' active' : ''}`}>
-            Wishlist
-          </Link>
-
           {/* Wallet connect — styled like .nav-sell */}
           <ConnectButton.Custom>
             {({ account, chain, openConnectModal, openAccountModal, mounted }) => {

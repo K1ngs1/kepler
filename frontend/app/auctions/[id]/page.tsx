@@ -141,25 +141,18 @@ export default function TradeCardDetailPage() {
             {isOwn ? (
               <div style={{ display: 'flex', gap: 8, flexDirection: 'column' }}>
                 <div style={{ fontSize: 13, color: '#555', padding: '10px 0' }}>This is your card.</div>
-                <a href="/collection" className="btn-place-bid" style={{ textAlign: 'center', textDecoration: 'none' }}>
-                  Manage in Collection
+                <a href="/listings" className="btn-place-bid" style={{ textAlign: 'center', textDecoration: 'none' }}>
+                  View Listings
                 </a>
               </div>
             ) : authed ? (
               <div style={{ display: 'flex', gap: 8 }}>
                 <a
-                  href={`/trades/new?with=${card.user_id}`}
+                  href="/listings"
                   className="btn-place-bid"
                   style={{ flex: 1, textAlign: 'center', textDecoration: 'none' }}
                 >
-                  Propose Trade
-                </a>
-                <a
-                  href={`/catalog/${cc.id}`}
-                  className="btn-watchlist"
-                  style={{ flex: 1, textAlign: 'center', textDecoration: 'none' }}
-                >
-                  View in Catalog
+                  Browse Listings
                 </a>
               </div>
             ) : (

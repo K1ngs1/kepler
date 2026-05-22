@@ -1,34 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
-import CardImage from '@/components/CardImage';
-import PriceBadge from '@/components/PriceBadge';
-import TradeValueSummary from '@/components/TradeValueSummary';
 import DepositSection from '@/components/DepositSection';
 import { createClient } from '@/lib/supabase/client';
-import { usePrices } from '@/lib/usePrices';
 import { useParams, useRouter } from 'next/navigation';
-
-interface CardInfo {
-  name: string;
-  set_name: string;
-  number: string;
-  image_url: string | null;
-}
-
-interface TradeItem {
-  id: string;
-  direction: 'offer' | 'request';
-  user_card_id: string;
-  user_cards: {
-    condition: string;
-    photo_url: string | null;
-    catalog_card_id: string;
-    catalog_cards: CardInfo | null;
-  } | null;
-}
 
 interface TradeMessage {
   id: string;
@@ -36,6 +13,20 @@ interface TradeMessage {
   content: string;
   sent_at: string;
   profiles: { username: string | null } | null;
+}
+
+interface OfferedCard {
+  card_name: string;
+  set_name?: string;
+  condition?: string;
+}
+
+interface RequestedItem {
+  id: string;
+  card_name: string;
+  set_name: string | null;
+  condition_text: string | null;
+  custom_price: number | null;
 }
 
 interface Trade {
@@ -47,6 +38,8 @@ interface Trade {
   recipient_confirmed: boolean;
   cash_amount?: number | null;
   listing_id?: string | null;
+  offered_cards?: OfferedCard[] | null;
+  requested_listing_item_ids?: string[] | null;
   deposit_amount?: number | null;
   initiator_deposit_locked?: boolean;
   recipient_deposit_locked?: boolean;
@@ -55,11 +48,6 @@ interface Trade {
   initiator: { username: string | null; reputation_score: number | null } | null;
   recipient: { username: string | null; reputation_score: number | null } | null;
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  proposed: 'Proposed', countered: 'Countered', accepted: 'Accepted',
-  completed: 'Completed', cancelled: 'Cancelled',
-};
 
 const TIMELINE_STEPS = ['proposed', 'accepted', 'completed'];
 
@@ -142,7 +130,7 @@ export default function TradeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [trade, setTrade] = useState<Trade | null>(null);
-  const [items, setItems] = useState<TradeItem[]>([]);
+  const [requestedItems, setRequestedItems] = useState<RequestedItem[]>([]);
   const [messages, setMessages] = useState<TradeMessage[]>([]);
   const [msgInput, setMsgInput] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
@@ -174,14 +162,18 @@ export default function TradeDetailPage() {
           .select('*, initiator:profiles!trade_offers_initiator_id_fkey(username, reputation_score), recipient:profiles!trade_offers_recipient_id_fkey(username, reputation_score)')
           .eq('id', id)
           .single();
-        if (data) setTrade(data as unknown as Trade);
-      };
+        if (data) {
+          setTrade(data as unknown as Trade);
 
-      const loadItems = async () => {
-        const res = await fetch(`/api/trade-items/${id}`);
-        if (res.ok) {
-          const data = await res.json();
-          setItems(data as unknown as TradeItem[]);
+          // Load requested listing items if we have item IDs
+          const itemIds = data.requested_listing_item_ids;
+          if (itemIds && itemIds.length > 0) {
+            const { data: items } = await supabase
+              .from('listing_items')
+              .select('id, card_name, set_name, condition_text, custom_price')
+              .in('id', itemIds);
+            if (items) setRequestedItems(items as unknown as RequestedItem[]);
+          }
         }
       };
 
@@ -195,7 +187,6 @@ export default function TradeDetailPage() {
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       };
 
-      // check if current user already rated this trade
       const checkRated = async () => {
         const { data } = await supabase
           .from('trade_ratings')
@@ -206,7 +197,7 @@ export default function TradeDetailPage() {
         if (data) setRated(true);
       };
 
-      await Promise.all([loadTrade(), loadItems(), loadMessages(), checkRated()]);
+      await Promise.all([loadTrade(), loadMessages(), checkRated()]);
       setLoading(false);
 
       tradeSub = supabase.channel(`trade-${id}`)
@@ -254,13 +245,6 @@ export default function TradeDetailPage() {
     else { setRated(true); showToast('Rating submitted!'); }
   };
 
-  // Price estimation — hooks must be called unconditionally (before early returns)
-  const catalogIds = useMemo(() =>
-    items.filter((i) => i.user_cards?.catalog_card_id).map((i) => i.user_cards!.catalog_card_id),
-    [items]
-  );
-  const prices = usePrices(catalogIds);
-
   if (loading) return (
     <>
       <Nav />
@@ -281,12 +265,8 @@ export default function TradeDetailPage() {
   const isRecipient = trade.recipient_id === userId;
   const partnerName = isInitiator ? (trade.recipient?.username ?? 'Unknown') : (trade.initiator?.username ?? 'Unknown');
   const partnerRep = isInitiator ? trade.recipient?.reputation_score : trade.initiator?.reputation_score;
-  const offered = items.filter((i) => i.direction === 'offer');
-  const requested = items.filter((i) => i.direction === 'request');
   const myConfirmed = isInitiator ? trade.initiator_confirmed : trade.recipient_confirmed;
-
-  const offerTotal = offered.reduce((sum, i) => sum + (prices[i.user_cards?.catalog_card_id ?? ''] ?? 0), 0);
-  const requestTotal = requested.reduce((sum, i) => sum + (prices[i.user_cards?.catalog_card_id ?? ''] ?? 0), 0);
+  const offeredCards: OfferedCard[] = trade.offered_cards || [];
 
   return (
     <>
@@ -300,7 +280,7 @@ export default function TradeDetailPage() {
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px' }}>
         {/* Header */}
         <div className="listing-toolbar" style={{ marginBottom: 12 }}>
-          <button onClick={() => router.push('/trades')} style={{ background: 'none', border: 'none', fontSize: 13, color: '#777', cursor: 'pointer', padding: 0 }}>← Trades</button>
+          <button onClick={() => router.push('/trades')} style={{ background: 'none', border: 'none', fontSize: 13, color: '#777', cursor: 'pointer', padding: 0 }}>← Offers</button>
           <div className="listing-title" style={{ flex: 1 }}>
             Trade with {partnerName}
             <ReputationStars score={partnerRep ?? null} />
@@ -318,93 +298,80 @@ export default function TradeDetailPage() {
         <div className="trade-detail-grid">
           {/* Left: trade items + actions */}
           <div>
-            {/* Cards */}
             <div className="trade-cards-grid" style={{ marginBottom: 24 }}>
-              {/* Offered */}
+              {/* Offered cards */}
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#555', marginBottom: 10 }}>
                   {isInitiator ? 'You Offer' : `${trade.initiator?.username ?? 'They'} Offer`}
                 </div>
-                {offered.length === 0 ? (
-                  <div style={{ color: '#ccc', fontSize: 12 }}>No cards</div>
-                ) : offered.map((item) => {
-                  const card = item.user_cards?.catalog_cards;
-                  const photoUrl = item.user_cards?.photo_url ?? null;
-                  return (
-                    <div key={item.id} className="collection-card" style={{ marginBottom: 10 }}>
-                      <div className="collection-card-img">
-                        <CardImage
-                          officialUrl={card?.image_url ?? null}
-                          photoUrl={photoUrl}
-                          alt={card?.name ?? 'Card'}
-                          maxHeight={110}
-                          maxWidth="85%"
-                        />
-                      </div>
-                      <div className="collection-card-body">
-                        <div className="collection-card-name">{card?.name ?? 'Card no longer available'}</div>
-                        <div className="collection-card-set">{card ? `${card.set_name} · #${card.number}` : '—'}</div>
-                        <div style={{ fontSize: 11, color: '#888', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                          {item.user_cards?.condition ?? ''}
-                          <PriceBadge price={prices[item.user_cards?.catalog_card_id ?? '']} />
+                {offeredCards.length === 0 ? (
+                  <div style={{ color: '#ccc', fontSize: 12 }}>No cards offered</div>
+                ) : (
+                  <div style={{ border: '1px solid #e5e5e5', borderRadius: 6, overflow: 'hidden' }}>
+                    {offeredCards.map((card, i) => (
+                      <div key={i} style={{
+                        padding: '10px 14px',
+                        borderBottom: i < offeredCards.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        background: '#fff',
+                      }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{card.card_name}</div>
+                        <div style={{ fontSize: 11, color: '#777', marginTop: 2 }}>
+                          {card.set_name && <span>{card.set_name}</span>}
+                          {card.set_name && card.condition && <span> · </span>}
+                          {card.condition && <span>{card.condition}</span>}
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Requested */}
+              {/* Requested items */}
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: '#555', marginBottom: 10 }}>
                   {isInitiator ? 'You Request' : `${trade.recipient?.username ?? 'They'} Request`}
                 </div>
-                {requested.length === 0 ? (
-                  <div style={{ color: '#ccc', fontSize: 12 }}>No cards</div>
-                ) : requested.map((item) => {
-                  const card = item.user_cards?.catalog_cards;
-                  const photoUrl = item.user_cards?.photo_url ?? null;
-                  return (
-                    <div key={item.id} className="collection-card" style={{ marginBottom: 10 }}>
-                      <div className="collection-card-img">
-                        <CardImage
-                          officialUrl={card?.image_url ?? null}
-                          photoUrl={photoUrl}
-                          alt={card?.name ?? 'Card'}
-                          maxHeight={110}
-                          maxWidth="85%"
-                        />
-                      </div>
-                      <div className="collection-card-body">
-                        <div className="collection-card-name">{card?.name ?? 'Card no longer available'}</div>
-                        <div className="collection-card-set">{card ? `${card.set_name} · #${card.number}` : '—'}</div>
-                        <div style={{ fontSize: 11, color: '#888', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                          {item.user_cards?.condition ?? ''}
-                          <PriceBadge price={prices[item.user_cards?.catalog_card_id ?? '']} />
+                {requestedItems.length === 0 ? (
+                  <div style={{ color: '#ccc', fontSize: 12 }}>No cards requested</div>
+                ) : (
+                  <div style={{ border: '1px solid #e5e5e5', borderRadius: 6, overflow: 'hidden' }}>
+                    {requestedItems.map((item, i) => (
+                      <div key={item.id} style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '10px 14px',
+                        borderBottom: i < requestedItems.length - 1 ? '1px solid #f0f0f0' : 'none',
+                        background: '#fff',
+                      }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{item.card_name}</div>
+                          <div style={{ fontSize: 11, color: '#777', marginTop: 2 }}>
+                            {item.set_name && <span>{item.set_name}</span>}
+                            {item.set_name && item.condition_text && <span> · </span>}
+                            {item.condition_text && <span>{item.condition_text}</span>}
+                          </div>
                         </div>
+                        {item.custom_price != null && (
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#333' }}>
+                            ${item.custom_price.toFixed(2)}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Trade value summary */}
+            {/* Cash offer */}
             {trade.cash_amount != null && trade.cash_amount > 0 && (
               <div style={{ marginBottom: 12, padding: '8px 12px', background: '#edf9f1', border: '1px solid #7bc99b', borderRadius: 4, display: 'inline-block', fontSize: 13, color: '#1a6b3a', fontWeight: 600 }}>
                 Includes Cash Offer: ${trade.cash_amount.toFixed(2)}
               </div>
             )}
-            <TradeValueSummary
-              offerTotal={offerTotal + (trade.cash_amount || 0)}
-              requestTotal={requestTotal}
-              offerLabel={isInitiator ? 'Your offer' : `${trade.initiator?.username ?? 'Their'} offer`}
-              requestLabel={isInitiator ? 'Your request' : `${trade.recipient?.username ?? 'Their'} request`}
-            />
 
             {/* Action buttons */}
             {trade.status !== 'completed' && trade.status !== 'cancelled' && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
                 {isRecipient && trade.status === 'proposed' && (
                   <button className="btn-place-bid" style={{ flex: 1, fontSize: 13 }} disabled={actionLoading} onClick={() => rpc('accept_trade')}>
                     Accept Trade
@@ -440,7 +407,7 @@ export default function TradeDetailPage() {
               />
             )}
 
-            {/* Star rating — shown when completed and user hasn't rated yet */}
+            {/* Star rating */}
             {trade.status === 'completed' && (isInitiator || isRecipient) && (
               <div style={{ marginTop: 24, padding: '16px', border: '1px solid #e5e5e5', borderRadius: 4 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, color: '#111' }}>
