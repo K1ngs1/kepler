@@ -43,17 +43,12 @@ export default function PaymentModal({ onClose, offerId, amount }: Props) {
       setTxStage('confirmed');
       const supabase = createClient();
       if (supabase) {
-        // Update purchase offer status to paid
+        // Update trade offer payment status
         supabase
-          .from('purchase_offers')
-          .update({ status: 'paid', payment_txn_hash: txHash })
+          .from('trade_offers')
+          .update({ payment_status: 'paid', payment_txn_hash: txHash })
           .eq('id', offerId)
           .then(() => {});
-
-        // Also call polygon-verify if available
-        supabase.functions.invoke('polygon-verify', {
-          body: { purchase_offer_id: offerId, tx_hash: txHash },
-        }).catch((err) => console.error('Verification error:', err));
       }
     }
   }, [isConfirmed, txHash, offerId, txStage]);

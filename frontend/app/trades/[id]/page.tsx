@@ -54,22 +54,21 @@ interface Trade {
   deposit_amount?: number | null;
   initiator_deposit_locked?: boolean;
   recipient_deposit_locked?: boolean;
-  middleman_id?: string | null;
-  middleman_status?: string | null;
-  middleman_fee?: number | null;
-  middleman_confirmed?: boolean;
-  middleman_requested_by?: string[] | null;
   tracking_number?: string | null;
+  disputed_by?: string | null;
+  dispute_reason?: string | null;
+  disputed_at?: string | null;
+  first_confirmed_at?: string | null;
+  dispute_resolution?: string | null;
   created_at: string;
   updated_at: string;
   initiator: { username: string | null; reputation_score: number | null } | null;
   recipient: { username: string | null; reputation_score: number | null } | null;
 }
 
-const TIMELINE_STEPS_BASIC = ['proposed', 'accepted', 'completed'];
-const TIMELINE_STEPS_MIDDLEMAN = ['proposed', 'inspection', 'accepted', 'completed'];
+const TIMELINE_STEPS = ['proposed', 'accepted', 'completed'];
 
-function TradeTimeline({ status, hasMiddleman }: { status: string; hasMiddleman: boolean }) {
+function TradeTimeline({ status }: { status: string }) {
   if (status === 'cancelled') {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20 }}>
@@ -78,7 +77,15 @@ function TradeTimeline({ status, hasMiddleman }: { status: string; hasMiddleman:
       </div>
     );
   }
-  const steps = hasMiddleman ? TIMELINE_STEPS_MIDDLEMAN : TIMELINE_STEPS_BASIC;
+  if (status === 'disputed') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20 }}>
+        <span className="trade-status-chip trade-status-disputed" style={{ fontSize: 12 }}>Disputed</span>
+        <span style={{ fontSize: 12, color: '#999' }}>This trade is under review.</span>
+      </div>
+    );
+  }
+  const steps = TIMELINE_STEPS;
   const currentIdx = steps.indexOf(status === 'countered' ? 'proposed' : status);
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 20 }}>
@@ -157,9 +164,13 @@ export default function TradeDetailPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [rated, setRated] = useState(false);
-  const [middlemanRequested, setMiddlemanRequested] = useState(false);
   const [shippingAddresses, setShippingAddresses] = useState<ShippingAddr[]>([]);
   const [shippingLoading, setShippingLoading] = useState(false);
+  const [disputeOpen, setDisputeOpen] = useState(false);
+  const [disputeReason, setDisputeReason] = useState('');
+  const [counterOpen, setCounterOpen] = useState(false);
+  const [counterCards, setCounterCards] = useState<{ card_name: string; set_name: string; condition: string }[]>([]);
+  const [counterCash, setCounterCash] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const showToast = (msg: string, ok = true) => {
@@ -186,8 +197,6 @@ export default function TradeDetailPage() {
           .single();
         if (data) {
           setTrade(data as unknown as Trade);
-          const requestedBy: string[] = data.middleman_requested_by || [];
-          setMiddlemanRequested(requestedBy.includes(user.id));
 
           // Load requested listing items if we have item IDs
           const itemIds = data.requested_listing_item_ids;
@@ -200,7 +209,7 @@ export default function TradeDetailPage() {
           }
 
           // Load shipping addresses if trade is in an appropriate state
-          if (['accepted', 'inspection', 'completed'].includes(data.status)) {
+          if (['accepted', 'completed', 'disputed'].includes(data.status)) {
             loadShippingAddresses();
           }
         }
@@ -262,12 +271,12 @@ export default function TradeDetailPage() {
     else setMsgInput('');
   };
 
-  const MIDDLEMAN_ID = process.env.NEXT_PUBLIC_MIDDLEMAN_ID || null;
-
   const RPC_LABELS: Record<string, string> = {
     accept_trade: 'Trade accepted!',
     cancel_trade: 'Trade cancelled.',
     complete_trade: 'Receipt confirmed!',
+    open_dispute: 'Dispute opened.',
+    counter_trade: 'Counter-offer sent!',
   };
 
   const rpc = async (fn: string, extraParams?: Record<string, unknown>) => {
@@ -280,46 +289,40 @@ export default function TradeDetailPage() {
     setActionLoading(false);
   };
 
-  const handleMiddlemanToggle = async () => {
-    if (!userId || !trade) return;
-    const supabase = createClient();
-    if (!supabase) return;
-
-    const currentRequests: string[] = trade.middleman_requested_by || [];
-    let newRequests: string[];
-    let updates: Record<string, unknown> = {};
-
-    if (currentRequests.includes(userId)) {
-      // Remove request
-      newRequests = currentRequests.filter(u => u !== userId);
-      setMiddlemanRequested(false);
-    } else {
-      // Add request
-      newRequests = [...currentRequests, userId];
-      setMiddlemanRequested(true);
-    }
-
-    updates.middleman_requested_by = newRequests;
-
-    // If both parties have requested, assign the middleman
-    const bothRequested = newRequests.includes(trade.initiator_id) && newRequests.includes(trade.recipient_id);
-    if (bothRequested && MIDDLEMAN_ID) {
-      updates.middleman_id = MIDDLEMAN_ID;
-      updates.middleman_fee = (trade.deposit_amount || 0) * 0.05; // 5% fee
-    } else if (!bothRequested) {
-      updates.middleman_id = null;
-      updates.middleman_fee = 0;
-    }
-
-    await supabase.from('trade_offers').update(updates).eq('id', trade.id);
-  };
-
   const handleRate = async (rating: number) => {
     const supabase = createClient();
     if (!supabase) return;
     const { error } = await supabase.rpc('rate_trade', { p_trade_id: id, p_rating: rating });
     if (error) showToast(error.message, false);
     else { setRated(true); showToast('Rating submitted!'); }
+  };
+
+  const handleCounter = async () => {
+    const validCards = counterCards.filter((c) => c.card_name.trim());
+    const cash = parseFloat(counterCash) || 0;
+    if (validCards.length === 0 && cash <= 0) {
+      showToast('Add at least one card or a cash amount.', false);
+      return;
+    }
+    await rpc('counter_trade', {
+      p_offered_cards: JSON.stringify(validCards),
+      p_cash_amount: cash,
+    });
+    setCounterOpen(false);
+    setCounterCards([]);
+    setCounterCash('');
+  };
+
+  const addCounterCard = () => {
+    setCounterCards([...counterCards, { card_name: '', set_name: '', condition: '' }]);
+  };
+
+  const updateCounterCard = (idx: number, field: string, value: string) => {
+    setCounterCards(counterCards.map((c, i) => i === idx ? { ...c, [field]: value } : c));
+  };
+
+  const removeCounterCard = (idx: number) => {
+    setCounterCards(counterCards.filter((_, i) => i !== idx));
   };
 
   if (loading) return (
@@ -370,7 +373,7 @@ export default function TradeDetailPage() {
         </div>
 
         {/* Timeline */}
-        <TradeTimeline status={trade.status} hasMiddleman={!!trade.middleman_id} />
+        <TradeTimeline status={trade.status} />
 
         <div className="trade-detail-grid">
           {/* Left: trade items + actions */}
@@ -446,82 +449,30 @@ export default function TradeDetailPage() {
               </div>
             )}
 
-            {/* Middleman request checkbox (only before acceptance) */}
-            {(isInitiator || isRecipient) && ['proposed', 'countered'].includes(trade.status) && MIDDLEMAN_ID && (
-              <div style={{ marginTop: 12, padding: '10px 12px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fafafa' }}>
-                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={middlemanRequested}
-                    onChange={handleMiddlemanToggle}
-                    style={{ marginTop: 2, accentColor: '#111', width: 14, height: 14, flexShrink: 0 }}
-                  />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Request Middleman</div>
-                    <div style={{ fontSize: 11.5, color: '#888', marginTop: 2 }}>
-                      A trusted middleman will verify items before completing the trade.
-                      {trade.middleman_id ? (
-                        <span style={{ display: 'block', marginTop: 3, color: '#3db56c', fontWeight: 600 }}>Both parties agreed — middleman assigned.</span>
-                      ) : (
-                        <span style={{ display: 'block', marginTop: 3, color: '#e5a000' }}>
-                          Both parties must agree.
-                          {(() => {
-                            const reqs = trade.middleman_requested_by || [];
-                            const otherRequested = isInitiator ? reqs.includes(trade.recipient_id) : reqs.includes(trade.initiator_id);
-                            if (middlemanRequested && !otherRequested) return ' Waiting for the other party…';
-                            if (!middlemanRequested && otherRequested) return ' The other party has requested a middleman.';
-                            return '';
-                          })()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </label>
-              </div>
-            )}
-
-            {/* Middleman status display (during inspection) */}
-            {trade.status === 'inspection' && trade.middleman_id && (
-              <div style={{ marginTop: 12, padding: '10px 12px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fafafa' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#111', marginBottom: 4 }}>Middleman Inspection</div>
-                <div style={{ fontSize: 12, color: '#555' }}>
-                  Status: <span className="trade-status-chip" style={{ fontSize: 11, background: '#fff3cd', color: '#856404' }}>{trade.middleman_status || 'pending'}</span>
-                </div>
-                <div style={{ fontSize: 11.5, color: '#888', marginTop: 6 }}>
-                  The middleman is inspecting the items. The trade will move to &quot;accepted&quot; once verification and shipping are complete.
-                </div>
-              </div>
-            )}
-
-            {/* Middleman actions (only visible to the middleman user) */}
-            {trade.status === 'inspection' && trade.middleman_id === userId && (
-              <div style={{ marginTop: 12, padding: '12px', border: '1px solid #cce5ff', borderRadius: 6, background: '#f0f7ff' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#004085', marginBottom: 8 }}>Middleman Actions</div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {['received', 'verified', 'shipped'].map((s) => (
-                    <button
-                      key={s}
-                      className="btn-outline-ext"
-                      style={{ width: 'auto', padding: '7px 14px', fontSize: 12, marginTop: 0, textTransform: 'capitalize' }}
-                      disabled={actionLoading}
-                      onClick={() => rpc('update_middleman_status', { p_status: s })}
-                    >
-                      Mark as {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Action buttons */}
-            {trade.status !== 'completed' && trade.status !== 'cancelled' && (
+            {trade.status !== 'completed' && trade.status !== 'cancelled' && trade.status !== 'disputed' && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
-                {isRecipient && trade.status === 'proposed' && (
+                {isRecipient && ['proposed', 'countered'].includes(trade.status) && (
                   <button className="btn-place-bid" style={{ flex: 1, fontSize: 13 }} disabled={actionLoading} onClick={() => rpc('accept_trade')}>
-                    Accept Trade
+                    Accept
                   </button>
                 )}
-                {(isInitiator || isRecipient) && ['proposed', 'countered', 'accepted'].includes(trade.status) && (
+                {isRecipient && ['proposed', 'countered'].includes(trade.status) && (
+                  <button
+                    className="btn-watchlist"
+                    style={{ flex: 1, fontSize: 13, borderColor: '#6b21a8', color: '#6b21a8' }}
+                    disabled={actionLoading}
+                    onClick={() => { setCounterCards([{ card_name: '', set_name: '', condition: '' }]); setCounterOpen(true); }}
+                  >
+                    Counter
+                  </button>
+                )}
+                {isRecipient && ['proposed', 'countered'].includes(trade.status) && (
+                  <button className="btn-watchlist" style={{ flex: 1, fontSize: 13, borderColor: '#c0392b', color: '#c0392b' }} disabled={actionLoading} onClick={() => rpc('cancel_trade')}>
+                    Reject
+                  </button>
+                )}
+                {(isInitiator || isRecipient) && trade.status === 'accepted' && (
                   <button className="btn-watchlist" style={{ flex: 1, fontSize: 13 }} disabled={actionLoading} onClick={() => rpc('cancel_trade')}>
                     Cancel
                   </button>
@@ -531,16 +482,185 @@ export default function TradeDetailPage() {
                     Confirm Receipt
                   </button>
                 )}
+                {trade.status === 'accepted' && (isInitiator || isRecipient) && (
+                  <button
+                    className="btn-watchlist"
+                    style={{ flex: 1, fontSize: 13, color: '#c0392b', borderColor: '#c0392b' }}
+                    disabled={actionLoading}
+                    onClick={() => setDisputeOpen(true)}
+                  >
+                    Open Dispute
+                  </button>
+                )}
                 {trade.status === 'accepted' && myConfirmed && (
-                  <div style={{ fontSize: 12.5, color: '#555', padding: '8px 0' }}>
+                  <div style={{ fontSize: 12.5, color: '#555', padding: '8px 0', width: '100%' }}>
                     Waiting for the other party to confirm receipt…
+                    {trade.first_confirmed_at && (() => {
+                      const deadline = new Date(trade.first_confirmed_at).getTime() + 7 * 24 * 60 * 60 * 1000;
+                      const remaining = deadline - Date.now();
+                      if (remaining <= 0) return <span style={{ display: 'block', marginTop: 4, fontSize: 11.5, color: '#e5a000' }}>Auto-completing soon...</span>;
+                      const days = Math.floor(remaining / (24 * 60 * 60 * 1000));
+                      const hours = Math.floor((remaining % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+                      return (
+                        <span style={{ display: 'block', marginTop: 4, fontSize: 11.5, color: '#888' }}>
+                          Trade will auto-complete in {days}d {hours}h if no response.
+                        </span>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
             )}
 
+            {/* Dispute modal */}
+            {disputeOpen && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 400, maxWidth: '90vw' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: '#111' }}>Open a Dispute</div>
+                  <div style={{ fontSize: 12.5, color: '#555', marginBottom: 12 }}>
+                    Describe the issue. An admin will review and determine the outcome. Deposits will remain locked until the dispute is resolved.
+                  </div>
+                  <textarea
+                    className="login-field-input"
+                    style={{ width: '100%', minHeight: 80, padding: '8px 12px', fontSize: 13, marginBottom: 12, resize: 'vertical' }}
+                    placeholder="What went wrong? (e.g., wrong card received, item not as described, never arrived...)"
+                    value={disputeReason}
+                    onChange={(e) => setDisputeReason(e.target.value)}
+                  />
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button
+                      className="btn-watchlist"
+                      style={{ width: 'auto', padding: '8px 16px', fontSize: 13, marginTop: 0 }}
+                      onClick={() => { setDisputeOpen(false); setDisputeReason(''); }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="btn-place-bid"
+                      style={{ width: 'auto', padding: '8px 16px', fontSize: 13, marginTop: 0, background: '#c0392b' }}
+                      disabled={!disputeReason.trim() || actionLoading}
+                      onClick={async () => {
+                        await rpc('open_dispute', { p_reason: disputeReason.trim() });
+                        setDisputeOpen(false);
+                        setDisputeReason('');
+                      }}
+                    >
+                      Submit Dispute
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Counter-offer modal */}
+            {counterOpen && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 500, maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: '#111' }}>Counter Offer</div>
+                  <div style={{ fontSize: 12.5, color: '#555', marginBottom: 16 }}>
+                    Propose different terms. Add cards you&apos;re willing to offer and/or a cash amount.
+                  </div>
+
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#333', marginBottom: 8 }}>Cards You Offer</div>
+                  {counterCards.map((card, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <input
+                          className="login-field-input"
+                          style={{ marginBottom: 0, padding: '7px 10px', fontSize: 13 }}
+                          placeholder="Card name *"
+                          value={card.card_name}
+                          onChange={(e) => updateCounterCard(idx, 'card_name', e.target.value)}
+                        />
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <input
+                            className="login-field-input"
+                            style={{ marginBottom: 0, padding: '6px 10px', fontSize: 12, flex: 1 }}
+                            placeholder="Set (optional)"
+                            value={card.set_name}
+                            onChange={(e) => updateCounterCard(idx, 'set_name', e.target.value)}
+                          />
+                          <input
+                            className="login-field-input"
+                            style={{ marginBottom: 0, padding: '6px 10px', fontSize: 12, flex: 1 }}
+                            placeholder="Condition (optional)"
+                            value={card.condition}
+                            onChange={(e) => updateCounterCard(idx, 'condition', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeCounterCard(idx)}
+                        style={{ background: 'none', border: 'none', color: '#c0392b', fontSize: 18, cursor: 'pointer', padding: '4px 8px', lineHeight: 1 }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={addCounterCard}
+                    style={{ background: 'none', border: '1px dashed #ccc', borderRadius: 4, padding: '6px 12px', fontSize: 12, color: '#555', cursor: 'pointer', marginBottom: 16, width: '100%' }}
+                  >
+                    + Add Card
+                  </button>
+
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#333', marginBottom: 6 }}>Cash Amount (optional)</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+                    <span style={{ fontSize: 14, color: '#555' }}>$</span>
+                    <input
+                      className="login-field-input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      style={{ marginBottom: 0, padding: '7px 10px', fontSize: 13, width: 120 }}
+                      placeholder="0.00"
+                      value={counterCash}
+                      onChange={(e) => setCounterCash(e.target.value)}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button
+                      className="btn-watchlist"
+                      style={{ width: 'auto', padding: '8px 16px', fontSize: 13, marginTop: 0 }}
+                      onClick={() => { setCounterOpen(false); setCounterCards([]); setCounterCash(''); }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="btn-place-bid"
+                      style={{ width: 'auto', padding: '8px 16px', fontSize: 13, marginTop: 0, background: '#6b21a8' }}
+                      disabled={actionLoading}
+                      onClick={handleCounter}
+                    >
+                      Send Counter
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Dispute status display */}
+            {trade.status === 'disputed' && (
+              <div style={{ marginTop: 16, padding: 16, border: '1px solid #f5c6cb', borderRadius: 8, background: '#fff5f5' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#c0392b', marginBottom: 8 }}>Trade Disputed</div>
+                <div style={{ fontSize: 12.5, color: '#555', marginBottom: 8 }}>
+                  Opened by {trade.disputed_by === userId ? 'you' : partnerName}
+                  {trade.disputed_at && <span> on {new Date(trade.disputed_at).toLocaleDateString()}</span>}
+                </div>
+                {trade.dispute_reason && (
+                  <div style={{ fontSize: 12.5, color: '#333', padding: '8px 12px', background: '#fff', border: '1px solid #e5e5e5', borderRadius: 4, marginBottom: 8 }}>
+                    {trade.dispute_reason}
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: '#888' }}>
+                  An admin will review this dispute and determine the outcome. Deposits remain locked until resolved.
+                </div>
+              </div>
+            )}
+
             {/* Security Deposit Section */}
-            {(trade.status === 'accepted' || trade.status === 'completed' || trade.status === 'inspection') && (
+            {(['accepted', 'completed', 'disputed'].includes(trade.status)) && (
               <DepositSection
                 tradeId={trade.id}
                 depositAmount={trade.deposit_amount ?? null}
@@ -548,15 +668,11 @@ export default function TradeDetailPage() {
                 recipientLocked={trade.recipient_deposit_locked ?? false}
                 isInitiator={isInitiator}
                 partnerName={partnerName}
-                middlemanId={trade.middleman_id}
-                middlemanStatus={trade.middleman_status}
-                middlemanFee={trade.middleman_fee}
-                middlemanConfirmed={trade.middleman_confirmed}
               />
             )}
 
             {/* Shipping Info Section */}
-            {['accepted', 'inspection', 'completed'].includes(trade.status) && (isInitiator || isRecipient) && (
+            {['accepted', 'completed', 'disputed'].includes(trade.status) && (isInitiator || isRecipient) && (
               <div style={{ marginTop: 24, padding: 16, border: '1px solid #ebebeb', borderRadius: 8, background: '#fafafa' }}>
                 <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: '#111' }}>
                   Shipping Info

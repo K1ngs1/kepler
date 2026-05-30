@@ -24,13 +24,9 @@ interface Props {
   recipientLocked: boolean;
   isInitiator: boolean;
   partnerName: string;
-  middlemanId?: string | null;
-  middlemanStatus?: string | null;
-  middlemanFee?: number | null;
-  middlemanConfirmed?: boolean;
 }
 
-export default function DepositSection({ tradeId, depositAmount, initiatorLocked, recipientLocked, isInitiator, partnerName, middlemanId, middlemanStatus, middlemanFee, middlemanConfirmed }: Props) {
+export default function DepositSection({ tradeId, depositAmount, initiatorLocked, recipientLocked, isInitiator, partnerName }: Props) {
   const { address, isConnected } = useAccount();
   const [proposedAmount, setProposedAmount] = useState(depositAmount ? depositAmount.toString() : '');
   const [loading, setLoading] = useState(false);
@@ -179,67 +175,6 @@ export default function DepositSection({ tradeId, depositAmount, initiatorLocked
           >
             {loading ? '...' : 'Propose Amount'}
           </button>
-        </div>
-      )}
-
-      {/* Middleman Verification Steps */}
-      {middlemanId && (
-        <div style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 6, padding: 12, marginBottom: 12, fontSize: 13 }}>
-          <div style={{ fontWeight: 600, marginBottom: 8, color: '#111' }}>Middleman Verification</div>
-          <div style={{ fontSize: 12, color: '#555', marginBottom: 10 }}>
-            A middleman is verifying this trade. Deposits will be released upon completion.
-            {middlemanFee != null && middlemanFee > 0 && (
-              <span style={{ display: 'block', marginTop: 4, color: '#888' }}>
-                Middleman fee: {middlemanFee.toFixed(2)} USDC (deducted from deposit on completion)
-              </span>
-            )}
-          </div>
-          {(() => {
-            const steps = [
-              { key: 'pending', label: 'Pending' },
-              { key: 'received', label: 'Received' },
-              { key: 'verified', label: 'Verified' },
-              { key: 'shipped', label: 'Shipped' },
-            ];
-            const currentIdx = steps.findIndex(s => s.key === (middlemanStatus || 'pending'));
-            return (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-                {steps.map((step, i) => {
-                  const done = i <= currentIdx;
-                  const active = i === currentIdx;
-                  return (
-                    <div key={step.key} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : 'none' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                        <div style={{
-                          width: 22, height: 22, borderRadius: '50%',
-                          background: done ? '#111' : '#e5e5e5',
-                          border: active ? '2px solid #111' : 'none',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          {done && (
-                            <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="#fff" strokeWidth="2.5">
-                              <path d="M2.5 7l3.5 3.5 5.5-6" />
-                            </svg>
-                          )}
-                        </div>
-                        <span style={{ fontSize: 9.5, color: done ? '#111' : '#aaa', fontWeight: done ? 600 : 400, whiteSpace: 'nowrap' }}>
-                          {step.label}
-                        </span>
-                      </div>
-                      {i < steps.length - 1 && (
-                        <div style={{ flex: 1, height: 2, background: i < currentIdx ? '#111' : '#e5e5e5', margin: '0 3px', marginBottom: 16 }} />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-          {middlemanConfirmed && (
-            <div style={{ marginTop: 8, fontSize: 12, color: '#3db56c', fontWeight: 600 }}>
-              Middleman has verified the items. Awaiting final confirmation from both parties.
-            </div>
-          )}
         </div>
       )}
 

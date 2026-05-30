@@ -37,7 +37,7 @@ export async function GET(
   // Verify the user is a participant in this trade
   const { data: trade, error: tradeError } = await supabase
     .from('trade_offers')
-    .select('id, status, initiator_id, recipient_id, middleman_id, middleman_status')
+    .select('id, status, initiator_id, recipient_id')
     .eq('id', params.tradeId)
     .single();
 
@@ -47,26 +47,20 @@ export async function GET(
 
   const isInitiator = trade.initiator_id === user.id;
   const isRecipient = trade.recipient_id === user.id;
-  const isMiddleman = trade.middleman_id === user.id;
 
-  if (!isInitiator && !isRecipient && !isMiddleman) {
+  if (!isInitiator && !isRecipient) {
     return NextResponse.json({ error: 'Not a participant in this trade.' }, { status: 403 });
   }
 
-  // Only reveal addresses after acceptance or during inspection
-  const allowedStatuses = ['accepted', 'inspection', 'completed'];
+  // Only reveal addresses after acceptance
+  const allowedStatuses = ['accepted', 'completed', 'disputed'];
   if (!allowedStatuses.includes(trade.status)) {
     return NextResponse.json({ error: 'Trade status does not allow address reveal.' }, { status: 403 });
   }
 
-  // Determine whose address to fetch:
-  // - Initiator sees recipient's address
-  // - Recipient sees initiator's address
-  // - Middleman sees both addresses
+  // Each party sees the other's address
   const addressUserIds: string[] = [];
-  if (isMiddleman) {
-    addressUserIds.push(trade.initiator_id, trade.recipient_id);
-  } else if (isInitiator) {
+  if (isInitiator) {
     addressUserIds.push(trade.recipient_id);
   } else {
     addressUserIds.push(trade.initiator_id);

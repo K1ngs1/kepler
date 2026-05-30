@@ -280,7 +280,7 @@ input, select { font-family: inherit; }
 .trade-status-accepted { background: #d4edda; color: #155724; }
 .trade-status-completed { background: #d4edda; color: #155724; }
 .trade-status-cancelled { background: #f8d7da; color: #721c24; }
-.trade-status-inspection { background: #fff3cd; color: #856404; }
+.trade-status-disputed { background: #f8d7da; color: #c0392b; }
 
 /* ── NAV BADGE ── */
 .nav-badge { position: absolute; top: 2px; right: 2px; background: #c0392b; color: #fff; font-size: 9px; font-weight: 700; border-radius: 999px; min-width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; padding: 0 4px; pointer-events: none; }

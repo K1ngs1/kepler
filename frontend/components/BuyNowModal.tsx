@@ -20,7 +20,6 @@ interface Props {
 }
 
 export default function BuyNowModal({ onClose, listingId, sellerId, items, onOfferSent }: Props) {
-  // Pre-fill with all card names from the listing
   const defaultCardsText = items.map((i) => {
     let line = i.card_name;
     if (i.set_name) line += ` — ${i.set_name}`;
@@ -71,18 +70,27 @@ export default function BuyNowModal({ onClose, listingId, sellerId, items, onOff
     }
 
     try {
-      const { error: insertError } = await supabase
-        .from('purchase_offers')
-        .insert({
-          listing_id: listingId,
-          buyer_id: user.id,
-          seller_id: sellerId,
-          amount,
-          cards_wanted: cardsWanted.trim(),
-          status: 'pending',
-        });
+      const selectedIds = items.map(i => i.id);
 
-      if (insertError) throw insertError;
+      const { data, error: rpcError } = await supabase.rpc('propose_mvp_trade', {
+        p_listing_id: listingId,
+        p_recipient_id: sellerId,
+        p_requested_listing_item_ids: selectedIds,
+        p_offered_cards: '[]',
+        p_cash_amount: amount,
+        p_offer_type: 'purchase',
+      });
+
+      if (rpcError) throw rpcError;
+
+      // Send the cards-wanted description as the first message
+      if (cardsWanted.trim() && data) {
+        await supabase.from('trade_messages').insert({
+          trade_id: data,
+          sender_id: user.id,
+          content: `Cards I want to buy:\n${cardsWanted.trim()}`,
+        });
+      }
 
       setSubmitted(true);
       onOfferSent?.();

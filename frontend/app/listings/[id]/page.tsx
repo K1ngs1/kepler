@@ -6,6 +6,7 @@ import Footer from '@/components/Footer';
 import ListingPhotoGallery from '@/components/ListingPhotoGallery';
 import BuyNowModal from '@/components/BuyNowModal';
 import PaymentModal from '@/components/PaymentModal';
+import DepositSection from '@/components/DepositSection';
 import ListingMessages from '@/components/ListingMessages';
 import { createClient } from '@/lib/supabase/client';
 import { useParams, useRouter } from 'next/navigation';
@@ -19,15 +20,45 @@ interface ListingItem {
   custom_price: number | null;
 }
 
-interface PurchaseOffer {
+interface OfferedCard {
+  card_name: string;
+  set_name?: string;
+  condition?: string;
+}
+
+interface Offer {
   id: string;
-  buyer_id: string;
-  seller_id: string;
-  amount: number;
-  cards_wanted: string | null;
+  initiator_id: string;
+  recipient_id: string;
+  offer_type: string;
   status: string;
+  cash_amount: number | null;
+  offered_cards: OfferedCard[] | null;
+  deposit_amount: number | null;
+  initiator_deposit_locked: boolean;
+  recipient_deposit_locked: boolean;
+  initiator_confirmed: boolean;
+  recipient_confirmed: boolean;
+  payment_status: string | null;
+  payment_txn_hash: string | null;
+  first_confirmed_at: string | null;
+  disputed_by: string | null;
+  dispute_reason: string | null;
+  disputed_at: string | null;
+  tracking_number: string | null;
   created_at: string;
-  buyer?: { username: string | null } | null;
+  initiator: { username: string | null } | null;
+}
+
+interface ShippingAddr {
+  id: string;
+  user_id: string;
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
 }
 
 interface Listing {
@@ -54,16 +85,15 @@ function StarDisplay({ score }: { score: number | null }) {
 }
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  pending: { bg: '#fef9e7', text: '#b7950b', border: '#f0e1a0' },
+  proposed: { bg: '#fef9e7', text: '#b7950b', border: '#f0e1a0' },
   accepted: { bg: '#eafaf1', text: '#1a8c49', border: '#a3d9b1' },
-  rejected: { bg: '#fdf0ef', text: '#c0392b', border: '#f5c6c2' },
-  paid: { bg: '#eef6ff', text: '#2471a3', border: '#aed2f0' },
   completed: { bg: '#eafaf1', text: '#1a8c49', border: '#a3d9b1' },
   cancelled: { bg: '#f5f5f5', text: '#888', border: '#ddd' },
+  disputed: { bg: '#fdf0ef', text: '#c0392b', border: '#f5c6c2' },
 };
 
 function OfferStatusBadge({ status }: { status: string }) {
-  const colors = STATUS_COLORS[status] || STATUS_COLORS.pending;
+  const colors = STATUS_COLORS[status] || STATUS_COLORS.proposed;
   return (
     <span style={{
       display: 'inline-block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
@@ -71,6 +101,20 @@ function OfferStatusBadge({ status }: { status: string }) {
       background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`,
     }}>
       {status}
+    </span>
+  );
+}
+
+function OfferTypeBadge({ type }: { type: string }) {
+  return (
+    <span style={{
+      display: 'inline-block', fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+      letterSpacing: 0.5, padding: '2px 8px', borderRadius: 999,
+      background: type === 'trade' ? '#f0e6ff' : '#e6f0ff',
+      color: type === 'trade' ? '#6b21a8' : '#1e40af',
+      border: `1px solid ${type === 'trade' ? '#d4b5ff' : '#93c5fd'}`,
+    }}>
+      {type}
     </span>
   );
 }
@@ -83,26 +127,56 @@ export default function ListingDetailPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [buyModalOpen, setBuyModalOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  const [offers, setOffers] = useState<PurchaseOffer[]>([]);
-  const [payingOffer, setPayingOffer] = useState<PurchaseOffer | null>(null);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [payingOffer, setPayingOffer] = useState<Offer | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [activeDeal, setActiveDeal] = useState<Offer | null>(null);
+  const [shippingAddresses, setShippingAddresses] = useState<ShippingAddr[]>([]);
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [disputeOpen, setDisputeOpen] = useState(false);
+  const [disputeReason, setDisputeReason] = useState('');
   const { isConnected, address } = useAccount();
 
-  // Load offers for this listing
+  const showError = (msg: string) => {
+    setErrorMsg(msg);
+    setTimeout(() => setErrorMsg(null), 4000);
+  };
+
   const loadOffers = useCallback(async (uid: string) => {
     const supabase = createClient();
     if (!supabase || !id) return;
 
     const { data } = await supabase
-      .from('purchase_offers')
-      .select('id, buyer_id, seller_id, amount, cards_wanted, status, created_at, buyer:profiles!purchase_offers_buyer_id_fkey(username)')
+      .from('trade_offers')
+      .select('id, initiator_id, recipient_id, offer_type, status, cash_amount, offered_cards, deposit_amount, initiator_deposit_locked, recipient_deposit_locked, initiator_confirmed, recipient_confirmed, payment_status, payment_txn_hash, first_confirmed_at, disputed_by, dispute_reason, disputed_at, tracking_number, created_at, initiator:profiles!trade_offers_initiator_id_fkey(username)')
       .eq('listing_id', id)
-      .or(`buyer_id.eq.${uid},seller_id.eq.${uid}`)
+      .or(`initiator_id.eq.${uid},recipient_id.eq.${uid}`)
       .order('created_at', { ascending: false });
 
-    if (data) setOffers(data as unknown as PurchaseOffer[]);
+    if (data) {
+      const typed = data as unknown as Offer[];
+      setOffers(typed);
+      // Find the active deal (accepted/disputed) for this user
+      const deal = typed.find(o =>
+        ['accepted', 'disputed'].includes(o.status) &&
+        (o.initiator_id === uid || o.recipient_id === uid)
+      );
+      setActiveDeal(deal || null);
+    }
   }, [id]);
+
+  const loadShippingAddresses = useCallback(async (tradeId: string) => {
+    setShippingLoading(true);
+    try {
+      const resp = await fetch(`/api/shipping/${tradeId}`);
+      if (resp.ok) {
+        const json = await resp.json();
+        setShippingAddresses(json.addresses || []);
+      }
+    } catch { /* ignore */ }
+    setShippingLoading(false);
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -115,9 +189,8 @@ export default function ListingDetailPage() {
         setUserId(data.user.id);
         loadOffers(data.user.id);
 
-        // Subscribe to realtime offer changes
         offerSub = supabase.channel(`offers-${id}`)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'purchase_offers', filter: `listing_id=eq.${id}` },
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'trade_offers', filter: `listing_id=eq.${id}` },
             () => loadOffers(data.user!.id))
           .subscribe();
       }
@@ -168,13 +241,18 @@ export default function ListingDetailPage() {
     return () => { offerSub?.unsubscribe(); };
   }, [id, loadOffers]);
 
+  // Load shipping when active deal exists
+  useEffect(() => {
+    if (activeDeal && ['accepted', 'disputed'].includes(activeDeal.status)) {
+      loadShippingAddresses(activeDeal.id);
+    }
+  }, [activeDeal, loadShippingAddresses]);
+
   const handleAcceptOffer = async (offerId: string) => {
     if (!isConnected || !address) {
-      setErrorMsg('Please connect your wallet first to receive crypto payments.');
-      setTimeout(() => setErrorMsg(null), 4000);
+      showError('Please connect your wallet first to receive crypto payments.');
       return;
     }
-
     setActionLoading(offerId);
     const supabase = createClient();
     if (!supabase) return;
@@ -183,11 +261,8 @@ export default function ListingDetailPage() {
       await supabase.from('profiles').update({ polygon_wallet: address }).eq('id', userId);
     }
 
-    await supabase
-      .from('purchase_offers')
-      .update({ status: 'accepted', updated_at: new Date().toISOString() })
-      .eq('id', offerId);
-
+    const { error } = await supabase.rpc('accept_trade', { p_trade_id: offerId });
+    if (error) showError(error.message);
     if (userId) await loadOffers(userId);
     setActionLoading(null);
   };
@@ -196,12 +271,32 @@ export default function ListingDetailPage() {
     setActionLoading(offerId);
     const supabase = createClient();
     if (!supabase) return;
+    const { error } = await supabase.rpc('cancel_trade', { p_trade_id: offerId });
+    if (error) showError(error.message);
+    if (userId) await loadOffers(userId);
+    setActionLoading(null);
+  };
 
-    await supabase
-      .from('purchase_offers')
-      .update({ status: 'rejected', updated_at: new Date().toISOString() })
-      .eq('id', offerId);
+  const handleConfirmReceipt = async (offerId: string) => {
+    setActionLoading(offerId);
+    const supabase = createClient();
+    if (!supabase) return;
+    const { error } = await supabase.rpc('complete_trade', { p_trade_id: offerId });
+    if (error) showError(error.message);
+    else setErrorMsg(null);
+    if (userId) await loadOffers(userId);
+    setActionLoading(null);
+  };
 
+  const handleOpenDispute = async () => {
+    if (!activeDeal || !disputeReason.trim()) return;
+    setActionLoading(activeDeal.id);
+    const supabase = createClient();
+    if (!supabase) return;
+    const { error } = await supabase.rpc('open_dispute', { p_trade_id: activeDeal.id, p_reason: disputeReason.trim() });
+    if (error) showError(error.message);
+    setDisputeOpen(false);
+    setDisputeReason('');
     if (userId) await loadOffers(userId);
     setActionLoading(null);
   };
@@ -213,8 +308,15 @@ export default function ListingDetailPage() {
   if (!listing) return <><Nav /><div style={{ textAlign: 'center', padding: '80px 0', color: '#888' }}>Listing not found.</div><Footer /></>;
 
   const isSeller = userId === listing.seller_id;
-  const myOffers = offers.filter(o => o.buyer_id === userId);
-  const incomingOffers = offers.filter(o => o.seller_id === userId && o.buyer_id !== userId);
+  const myOffers = offers.filter(o => o.initiator_id === userId);
+  const incomingOffers = offers.filter(o => o.recipient_id === userId && o.initiator_id !== userId);
+
+  // For active deal
+  const isInitiator = activeDeal?.initiator_id === userId;
+  const myConfirmed = activeDeal ? (isInitiator ? activeDeal.initiator_confirmed : activeDeal.recipient_confirmed) : false;
+  const partnerName = activeDeal
+    ? (isInitiator ? (listing.seller?.username ?? 'Seller') : (activeDeal.initiator?.username ?? 'Buyer'))
+    : '';
 
   return (
     <>
@@ -259,18 +361,25 @@ export default function ListingDetailPage() {
 
           <div className="detail-action-btns" style={{ marginTop: 24 }}>
             {isSeller ? (
-              <button className="btn-outline-ext" onClick={() => alert('Edit flow not implemented yet.')}>
+              <button className="btn-outline-ext" onClick={() => router.push(`/listings/${listing.id}/edit`)}>
                 Edit Listing
               </button>
             ) : (
-              <>
+              <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn-buy-now" onClick={() => setBuyModalOpen(true)}>
                   Make Offer
                 </button>
-              </>
+                <button
+                  className="btn-outline-ext"
+                  onClick={() => router.push(`/trades/new?fromListing=${listing.id}`)}
+                  style={{ marginTop: 0 }}
+                >
+                  Propose Trade
+                </button>
+              </div>
             )}
           </div>
-          
+
           {(isSeller || userId) && (
             <div style={{ marginTop: 8 }}>
               <button className="btn-message-seller" onClick={() => setChatOpen(true)}>
@@ -280,7 +389,158 @@ export default function ListingDetailPage() {
             </div>
           )}
 
-          {/* ── SELLER: Incoming Offers ── */}
+          {/* ══════ ACTIVE DEAL DASHBOARD ══════ */}
+          {activeDeal && (
+            <div style={{ marginTop: 24, padding: 20, border: '2px solid #111', borderRadius: 8, background: '#fafafa' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#111' }}>
+                  Active Deal
+                  <span style={{ marginLeft: 8 }}><OfferTypeBadge type={activeDeal.offer_type} /></span>
+                </div>
+                <OfferStatusBadge status={activeDeal.status} />
+              </div>
+
+              {/* What's being exchanged */}
+              {activeDeal.offer_type === 'trade' && activeDeal.offered_cards && activeDeal.offered_cards.length > 0 && (
+                <div style={{ marginBottom: 12, padding: '8px 12px', background: '#fff', border: '1px solid #e5e5e5', borderRadius: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#555', marginBottom: 6 }}>
+                    {isInitiator ? 'You Offer' : `${activeDeal.initiator?.username ?? 'They'} Offer`}
+                  </div>
+                  {activeDeal.offered_cards.map((card, i) => (
+                    <div key={i} style={{ fontSize: 12.5, color: '#333', padding: '2px 0' }}>
+                      {card.card_name}
+                      {card.set_name && <span style={{ color: '#777' }}> — {card.set_name}</span>}
+                      {card.condition && <span style={{ color: '#999' }}> ({card.condition})</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {activeDeal.cash_amount != null && activeDeal.cash_amount > 0 && (
+                <div style={{ marginBottom: 12, padding: '6px 12px', background: '#edf9f1', border: '1px solid #7bc99b', borderRadius: 4, fontSize: 13, color: '#1a6b3a', fontWeight: 600 }}>
+                  {activeDeal.offer_type === 'purchase' ? 'Price' : 'Cash included'}: ${activeDeal.cash_amount.toFixed(2)}
+                </div>
+              )}
+
+              {/* Purchase: Pay Now button */}
+              {activeDeal.offer_type === 'purchase' && activeDeal.status === 'accepted' && isInitiator && !activeDeal.payment_status && (
+                <button
+                  className="btn-place-bid"
+                  style={{ fontSize: 13, marginBottom: 12 }}
+                  onClick={() => setPayingOffer(activeDeal)}
+                >
+                  Pay Now — ${(activeDeal.cash_amount ?? 0).toFixed(2)}
+                </button>
+              )}
+              {activeDeal.payment_status === 'paid' && (
+                <div style={{ fontSize: 12, color: '#1a8c49', fontWeight: 600, marginBottom: 12 }}>
+                  Payment sent
+                </div>
+              )}
+
+              {/* Action buttons */}
+              {activeDeal.status === 'accepted' && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                  {!myConfirmed && (
+                    <button
+                      className="btn-place-bid"
+                      style={{ flex: 1, fontSize: 13 }}
+                      disabled={actionLoading === activeDeal.id}
+                      onClick={() => handleConfirmReceipt(activeDeal.id)}
+                    >
+                      Confirm Receipt
+                    </button>
+                  )}
+                  <button
+                    className="btn-watchlist"
+                    style={{ flex: 1, fontSize: 13, color: '#c0392b', borderColor: '#c0392b' }}
+                    disabled={actionLoading === activeDeal.id}
+                    onClick={() => setDisputeOpen(true)}
+                  >
+                    Open Dispute
+                  </button>
+                </div>
+              )}
+              {activeDeal.status === 'accepted' && myConfirmed && (
+                <div style={{ fontSize: 12.5, color: '#555', marginBottom: 12 }}>
+                  Waiting for the other party to confirm receipt…
+                  {activeDeal.first_confirmed_at && (() => {
+                    const deadline = new Date(activeDeal.first_confirmed_at).getTime() + 7 * 24 * 60 * 60 * 1000;
+                    const remaining = deadline - Date.now();
+                    if (remaining <= 0) return <span style={{ display: 'block', marginTop: 4, fontSize: 11.5, color: '#e5a000' }}>Auto-completing soon...</span>;
+                    const days = Math.floor(remaining / (24 * 60 * 60 * 1000));
+                    const hours = Math.floor((remaining % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+                    return (
+                      <span style={{ display: 'block', marginTop: 4, fontSize: 11.5, color: '#888' }}>
+                        Trade will auto-complete in {days}d {hours}h if no response.
+                      </span>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Disputed status */}
+              {activeDeal.status === 'disputed' && (
+                <div style={{ padding: 12, border: '1px solid #f5c6cb', borderRadius: 6, background: '#fff5f5', marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#c0392b', marginBottom: 6 }}>Trade Disputed</div>
+                  <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>
+                    Opened by {activeDeal.disputed_by === userId ? 'you' : partnerName}
+                    {activeDeal.disputed_at && <span> on {new Date(activeDeal.disputed_at).toLocaleDateString()}</span>}
+                  </div>
+                  {activeDeal.dispute_reason && (
+                    <div style={{ fontSize: 12, color: '#333', padding: '6px 10px', background: '#fff', border: '1px solid #e5e5e5', borderRadius: 4, marginBottom: 6 }}>
+                      {activeDeal.dispute_reason}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11.5, color: '#888' }}>
+                    An admin will review and determine the outcome. Deposits remain locked.
+                  </div>
+                </div>
+              )}
+
+              {/* Escrow deposit */}
+              <DepositSection
+                tradeId={activeDeal.id}
+                depositAmount={activeDeal.deposit_amount ?? null}
+                initiatorLocked={activeDeal.initiator_deposit_locked ?? false}
+                recipientLocked={activeDeal.recipient_deposit_locked ?? false}
+                isInitiator={!!isInitiator}
+                partnerName={partnerName}
+              />
+
+              {/* Shipping info */}
+              <div style={{ marginTop: 16, padding: 12, border: '1px solid #ebebeb', borderRadius: 6, background: '#fff' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: '#111' }}>Shipping Info</div>
+                <div style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>
+                  Ship items to your trade partner&apos;s address below.
+                </div>
+                {shippingLoading ? (
+                  <div style={{ fontSize: 12, color: '#aaa' }}>Loading address…</div>
+                ) : shippingAddresses.length > 0 ? (
+                  shippingAddresses.map((addr) => (
+                    <div key={addr.id} style={{ padding: '8px 10px', border: '1px solid #e5e5e5', borderRadius: 4, background: '#fafafa', marginBottom: 4 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{addr.name}</div>
+                      <div style={{ fontSize: 12, color: '#555', marginTop: 2, lineHeight: 1.5 }}>
+                        {addr.street}<br />
+                        {addr.city}, {addr.state} {addr.zip}<br />
+                        {addr.country}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ fontSize: 12, color: '#999' }}>
+                    No shipping address on file. Ask your trade partner to add one in Settings.
+                  </div>
+                )}
+                {activeDeal.tracking_number && (
+                  <div style={{ marginTop: 6, fontSize: 12, color: '#555' }}>
+                    Tracking: <span style={{ fontFamily: 'monospace', color: '#333', fontWeight: 600 }}>{activeDeal.tracking_number}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ══════ SELLER: Incoming Offers ══════ */}
           {isSeller && incomingOffers.length > 0 && (
             <div style={{ marginTop: 24 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#111', marginBottom: 12 }}>
@@ -291,29 +551,37 @@ export default function ListingDetailPage() {
                   <div key={offer.id} className="offer-card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>
-                          {offer.buyer?.username ?? 'Unknown Buyer'}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>
+                            {offer.initiator?.username ?? 'Unknown'}
+                          </span>
+                          <OfferTypeBadge type={offer.offer_type} />
                         </div>
                         <div style={{ fontSize: 11, color: '#999' }}>{fmtDate(offer.created_at)}</div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: '#111' }}>
-                          ${offer.amount.toFixed(2)}
-                        </div>
+                        {offer.cash_amount != null && offer.cash_amount > 0 && (
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#111' }}>
+                            ${offer.cash_amount.toFixed(2)}
+                          </div>
+                        )}
                         <OfferStatusBadge status={offer.status} />
                       </div>
                     </div>
 
-                    {offer.cards_wanted && (
-                      <div style={{
-                        fontSize: 12, color: '#555', background: '#f9f9f9', padding: '8px 10px',
-                        borderRadius: 4, marginBottom: 10, whiteSpace: 'pre-wrap', lineHeight: 1.5,
-                      }}>
-                        {offer.cards_wanted}
+                    {/* Show offered cards for trade offers */}
+                    {offer.offer_type === 'trade' && offer.offered_cards && offer.offered_cards.length > 0 && (
+                      <div style={{ fontSize: 12, color: '#555', background: '#f9f9f9', padding: '8px 10px', borderRadius: 4, marginBottom: 10 }}>
+                        {offer.offered_cards.map((card, i) => (
+                          <div key={i}>
+                            {card.card_name}
+                            {card.set_name && <span style={{ color: '#999' }}> — {card.set_name}</span>}
+                          </div>
+                        ))}
                       </div>
                     )}
 
-                    {offer.status === 'pending' && (
+                    {offer.status === 'proposed' && (
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button
                           className="offer-accept-btn"
@@ -337,8 +605,8 @@ export default function ListingDetailPage() {
             </div>
           )}
 
-          {/* ── BUYER: My Offers ── */}
-          {!isSeller && myOffers.length > 0 && (
+          {/* ══════ BUYER: My Offers ══════ */}
+          {!isSeller && myOffers.length > 0 && !activeDeal && (
             <div style={{ marginTop: 24 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#111', marginBottom: 12 }}>
                 Your Offers
@@ -347,18 +615,25 @@ export default function ListingDetailPage() {
                 {myOffers.map((offer) => (
                   <div key={offer.id} className="offer-card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#111' }}>
-                        ${offer.amount.toFixed(2)}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {offer.cash_amount != null && offer.cash_amount > 0 && (
+                          <span style={{ fontSize: 15, fontWeight: 700, color: '#111' }}>
+                            ${offer.cash_amount.toFixed(2)}
+                          </span>
+                        )}
+                        <OfferTypeBadge type={offer.offer_type} />
                       </div>
                       <OfferStatusBadge status={offer.status} />
                     </div>
 
-                    {offer.cards_wanted && (
-                      <div style={{
-                        fontSize: 12, color: '#555', background: '#f9f9f9', padding: '8px 10px',
-                        borderRadius: 4, marginBottom: 8, whiteSpace: 'pre-wrap', lineHeight: 1.5,
-                      }}>
-                        {offer.cards_wanted}
+                    {offer.offer_type === 'trade' && offer.offered_cards && offer.offered_cards.length > 0 && (
+                      <div style={{ fontSize: 12, color: '#555', background: '#f9f9f9', padding: '8px 10px', borderRadius: 4, marginBottom: 8 }}>
+                        {offer.offered_cards.map((card, i) => (
+                          <div key={i}>
+                            {card.card_name}
+                            {card.set_name && <span style={{ color: '#999' }}> — {card.set_name}</span>}
+                          </div>
+                        ))}
                       </div>
                     )}
 
@@ -366,27 +641,14 @@ export default function ListingDetailPage() {
                       Submitted {fmtDate(offer.created_at)}
                     </div>
 
-                    {offer.status === 'pending' && (
+                    {offer.status === 'proposed' && (
                       <div style={{ fontSize: 12, color: '#b7950b' }}>
-                        ⏳ Waiting for seller to respond…
+                        Waiting for seller to respond…
                       </div>
                     )}
-                    {offer.status === 'accepted' && (
-                      <button
-                        className="offer-pay-btn"
-                        onClick={() => setPayingOffer(offer)}
-                      >
-                        Pay Now — ${offer.amount.toFixed(2)}
-                      </button>
-                    )}
-                    {offer.status === 'rejected' && (
-                      <div style={{ fontSize: 12, color: '#c0392b' }}>
-                        Offer was declined by the seller.
-                      </div>
-                    )}
-                    {offer.status === 'paid' && (
-                      <div style={{ fontSize: 12, color: '#1a8c49', fontWeight: 600 }}>
-                        ✓ Payment sent
+                    {offer.status === 'cancelled' && (
+                      <div style={{ fontSize: 12, color: '#888' }}>
+                        This offer was declined.
                       </div>
                     )}
                   </div>
@@ -450,6 +712,40 @@ export default function ListingDetailPage() {
       </div>
 
       <Footer />
+
+      {/* Dispute modal */}
+      {disputeOpen && (
+        <div className="modal-bg">
+          <div className="login-modal" style={{ width: 400 }}>
+            <button className="login-close" onClick={() => setDisputeOpen(false)}>×</button>
+            <div className="login-heading">Open a Dispute</div>
+            <div className="login-sub">
+              Describe the issue. An admin will review and determine the outcome. Deposits remain locked until resolved.
+            </div>
+            <textarea
+              className="login-field-input"
+              style={{ height: 80, resize: 'vertical', fontSize: 13, fontFamily: 'inherit' }}
+              placeholder="What went wrong? (e.g., wrong card, item not as described, never arrived...)"
+              value={disputeReason}
+              onChange={(e) => setDisputeReason(e.target.value)}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn-watchlist" style={{ width: 'auto', padding: '8px 16px', fontSize: 13, marginTop: 0 }} onClick={() => { setDisputeOpen(false); setDisputeReason(''); }}>
+                Cancel
+              </button>
+              <button
+                className="btn-place-bid"
+                style={{ width: 'auto', padding: '8px 16px', fontSize: 13, marginTop: 0, background: '#c0392b' }}
+                disabled={!disputeReason.trim() || !!actionLoading}
+                onClick={handleOpenDispute}
+              >
+                Submit Dispute
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {buyModalOpen && (
         <BuyNowModal
           onClose={() => setBuyModalOpen(false)}
@@ -463,7 +759,7 @@ export default function ListingDetailPage() {
         <PaymentModal
           onClose={() => { setPayingOffer(null); if (userId) loadOffers(userId); }}
           offerId={payingOffer.id}
-          amount={payingOffer.amount}
+          amount={payingOffer.cash_amount ?? 0}
         />
       )}
       <ListingMessages

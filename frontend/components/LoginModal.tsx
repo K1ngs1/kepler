@@ -40,13 +40,13 @@ export default function LoginModal({ onClose, onSuccess }: Props) {
         const { error: err } = await supabase.auth.signUp({ email, password });
         if (err) throw err;
         setDone(true);
-        setTimeout(() => { onSuccess({ name: email.split('@')[0], email }); router.refresh(); }, 1200);
+        setTimeout(() => { onSuccess({ name: email.split('@')[0], email }); router.push('/listings'); }, 1200);
       } else {
         const { data, error: err } = await supabase.auth.signInWithPassword({ email, password });
         if (err) throw err;
         setDone(true);
         const name = data.user?.user_metadata?.full_name || email.split('@')[0];
-        setTimeout(() => { onSuccess({ name, email }); router.refresh(); }, 1200);
+        setTimeout(() => { onSuccess({ name, email }); router.push('/listings'); }, 1200);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
@@ -73,7 +73,7 @@ export default function LoginModal({ onClose, onSuccess }: Props) {
     }
     const { error: err } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback` },
+      options: { redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/listings` },
     });
     if (err) { setError(err.message); setLoading(false); }
   };
