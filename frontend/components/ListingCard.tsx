@@ -1,6 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface Listing {
   id: string;
@@ -10,72 +13,108 @@ interface Listing {
   cover_photo_url: string | null;
   seller: { username: string | null; reputation_score: number | null } | null;
   item_count: number;
+  grade?: string | null;
 }
 
 interface Props {
   listing: Listing;
 }
 
-function StarDisplay({ score }: { score: number | null }) {
-  if (!score || score === 0) return null;
-  return (
-    <span style={{ fontSize: 11, color: '#888', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-      {'★'.repeat(Math.round(score))}{'☆'.repeat(5 - Math.round(score))}
-      <span style={{ marginLeft: 2 }}>{score}</span>
-    </span>
-  );
+function formatPrice(listing: Listing): string {
+  const { price_min, price_max } = listing;
+  if (price_min == null && price_max == null) return '';
+  if (price_min != null && price_max != null) {
+    return price_min === price_max
+      ? `$${price_min.toFixed(2)}`
+      : `$${price_min.toFixed(2)} – $${price_max.toFixed(2)}`;
+  }
+  if (price_min != null) return `From $${price_min.toFixed(2)}`;
+  return `Up to $${price_max!.toFixed(2)}`;
 }
 
 export default function ListingCard({ listing }: Props) {
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const router = useRouter();
+
+  const priceLabel = formatPrice(listing);
+  const ariaLabel = [
+    listing.title,
+    listing.grade ? `Grade: ${listing.grade}` : null,
+    priceLabel ? priceLabel : 'Open to offers',
+    listing.seller?.username ? `Seller: ${listing.seller.username}` : null,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
   return (
-    <Link href={`/listings/${listing.id}`} style={{ textDecoration: 'none' }}>
-      <div className="lot-card">
-        <div className="lot-card-img">
-          {listing.cover_photo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+    <Link
+      href={`/listings/${listing.id}`}
+      className="listing-card"
+      aria-label={ariaLabel}
+      prefetch={false}
+      onMouseEnter={() => router.prefetch(`/listings/${listing.id}`)}
+    >
+      <div className="listing-card__img">
+        {listing.cover_photo_url ? (
+          <>
+            {!imgLoaded && (
+              <div className="listing-card__skeleton" aria-hidden="true" />
+            )}
+            <Image
               src={listing.cover_photo_url}
               alt={listing.title}
+              width={300}
+              height={420}
               loading="lazy"
-              style={{ maxHeight: 175, maxWidth: '88%', objectFit: 'contain' }}
+              onLoad={() => setImgLoaded(true)}
+              style={{
+                opacity: imgLoaded ? 1 : 0,
+                transition: 'opacity 0.2s',
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+              }}
             />
-          ) : (
-            <div style={{ color: '#ccc', fontSize: 12, textAlign: 'center', padding: '0 8px' }}>
-              No photo
-            </div>
-          )}
+          </>
+        ) : (
+          <div className="listing-card__no-photo" aria-label="No photo available">
+            No photo
+          </div>
+        )}
+      </div>
+
+      <div className="listing-card__body">
+        <div className="listing-card__count">
+          {listing.item_count} card{listing.item_count !== 1 ? 's' : ''}
         </div>
-        <div className="lot-body">
-          <div className="lot-num" style={{ fontSize: 11, color: '#888' }}>
-            {listing.item_count} card{listing.item_count !== 1 ? 's' : ''}
-          </div>
-          <div className="lot-title" style={{ fontSize: 14, fontWeight: 600, color: '#111', marginBottom: 4 }}>
-            {listing.title}
-          </div>
-          <div style={{ fontSize: 12, color: '#777', marginBottom: 4 }}>
-            Seller: <span style={{ fontWeight: 600, color: '#333' }}>{listing.seller?.username ?? 'Anonymous'}</span>
-          </div>
-          {listing.seller?.reputation_score ? (
-            <div style={{ marginBottom: 6 }}>
-              <StarDisplay score={listing.seller.reputation_score} />
-            </div>
-          ) : null}
-          <div style={{ marginTop: 'auto', paddingTop: 10 }}>
-            {listing.price_min != null || listing.price_max != null ? (
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>
-                {listing.price_min != null && listing.price_max != null
-                  ? listing.price_min === listing.price_max
-                    ? `$${listing.price_min.toFixed(2)}`
-                    : `$${listing.price_min.toFixed(2)} - $${listing.price_max.toFixed(2)}`
-                  : listing.price_min != null
-                  ? `From $${listing.price_min.toFixed(2)}`
-                  : `Up to $${listing.price_max?.toFixed(2)}`}
-              </div>
-            ) : (
-              <div style={{ fontSize: 13, color: '#888' }}>Open to offers</div>
-            )}
-          </div>
+
+        <h3 className="listing-card__title">{listing.title}</h3>
+
+        {listing.grade && (
+          <span className="listing-card__grade" aria-label={`Grade: ${listing.grade}`}>
+            {listing.grade}
+          </span>
+        )}
+
+        <div className="listing-card__seller">
+          <span className="listing-card__seller-name">
+            {listing.seller?.username ?? 'Anonymous'}
+          </span>
         </div>
+
+        {priceLabel ? (
+          <div className="listing-card__price">{priceLabel}</div>
+        ) : (
+          <div className="listing-card__price--open">Open to offers</div>
+        )}
+
+        <button
+          className="listing-card__btn"
+          aria-label={`View listing: ${listing.title}`}
+          tabIndex={-1}
+        >
+          View Listing
+        </button>
       </div>
     </Link>
   );
