@@ -85,7 +85,7 @@ export default function ListingsPage() {
       <div className="section" style={{ minHeight: '60vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h1 className="section-hd-title" style={{ fontSize: 24, margin: 0 }}>Marketplace Listings</h1>
-          <Link href="/listings/new" className="nav-sell" style={{ textDecoration: 'none', display: 'inline-block' }}>
+          <Link href="/listings/new" className="nav-sell" style={{ textDecoration: 'none', display: 'inline-block', borderRadius: 10, padding: '8px 18px', fontSize: 13 }}>
             Create Listing
           </Link>
         </div>

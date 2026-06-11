@@ -81,6 +81,14 @@ export default function ListingCard({ listing }: Props) {
             No photo
           </div>
         )}
+        {/* TODO: wire favorite state when user accounts support it */}
+        <button
+          className="listing-card__fav"
+          aria-label="Save listing"
+          onClick={(e) => e.preventDefault()}
+        >
+          ☆
+        </button>
       </div>
 
       <div className="listing-card__body">
