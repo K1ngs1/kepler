@@ -2,15 +2,21 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { ethers } from "https://esm.sh/ethers@6?target=deno"
 
+// Restrict to the app origin in production via ALLOWED_ORIGIN; default '*'
+// keeps local/dev usable.
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': Deno.env.get('ALLOWED_ORIGIN') || '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    status,
+  })
+
 // USDC ERC-20 Transfer event signature
-const USDC_ABI = [
-  "event Transfer(address indexed from, address indexed to, uint256 value)"
-]
+const USDC_ABI = ["event Transfer(address indexed from, address indexed to, uint256 value)"]
 
 // Polygon native USDC
 const USDC_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'
@@ -23,50 +29,76 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const rpcUrl = Deno.env.get('POLYGON_RPC_URL') || 'https://polygon-rpc.com'
     const merchantWallet = Deno.env.get('MERCHANT_WALLET')!
 
-    const { purchase_offer_id, tx_hash } = await req.json()
+    // ── 0. Authenticate the caller (verify_jwt=true guarantees a valid JWT;
+    //       we still need the user id to authorize against the trade). ──
+    const authHeader = req.headers.get('Authorization') || ''
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    })
+    const { data: { user }, error: userErr } = await userClient.auth.getUser()
+    if (userErr || !user) {
+      return json({ error: 'Unauthorized' }, 401)
+    }
 
-    if (!purchase_offer_id || !tx_hash) {
-      return new Response(JSON.stringify({ error: 'purchase_offer_id and tx_hash are required' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      })
+    const { trade_id, tx_hash } = await req.json()
+    if (!trade_id || !tx_hash) {
+      return json({ error: 'trade_id and tx_hash are required' }, 400)
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // 1. Fetch the purchase offer
-    const { data: offer, error: offerErr } = await supabase
-      .from('purchase_offers')
-      .select('*')
-      .eq('id', purchase_offer_id)
+    // ── 1. Fetch the trade offer ──
+    const { data: trade, error: tradeErr } = await supabase
+      .from('trade_offers')
+      .select('id, initiator_id, offer_type, cash_amount, payment_status, payment_txn_hash')
+      .eq('id', trade_id)
       .single()
 
-    if (offerErr || !offer) {
-      return new Response(JSON.stringify({ error: 'Purchase offer not found' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 404,
-      })
+    if (tradeErr || !trade) {
+      return json({ error: 'Trade offer not found' }, 404)
     }
 
-    // 2. Verify the on-chain transaction
+    // ── 2. Authorize: only the payer (initiator) may verify a payment ──
+    if (trade.initiator_id !== user.id) {
+      return json({ error: 'Only the offer initiator can record a payment.' }, 403)
+    }
+
+    // Idempotent: already verified for this same tx is a success.
+    if (trade.payment_status === 'verified' || trade.payment_status === 'paid') {
+      return json({ success: true, status: trade.payment_status })
+    }
+
+    // Only money-carrying offers require a payment.
+    const cashAmount = Number(trade.cash_amount || 0)
+    if (trade.offer_type !== 'purchase' && cashAmount <= 0) {
+      return json({ error: 'This offer does not require a payment.' }, 400)
+    }
+
+    // ── 3. Replay protection: reject a tx hash already used elsewhere ──
+    const { data: dupe } = await supabase
+      .from('trade_offers')
+      .select('id')
+      .eq('payment_txn_hash', tx_hash)
+      .maybeSingle()
+    if (dupe && dupe.id !== trade_id) {
+      return json({ error: 'This transaction has already been used for another offer.' }, 409)
+    }
+
+    // ── 4. Verify the on-chain transaction ──
     const provider = new ethers.JsonRpcProvider(rpcUrl)
     const receipt = await provider.getTransactionReceipt(tx_hash)
-
     if (!receipt || receipt.status !== 1) {
-      return new Response(JSON.stringify({ error: 'Transaction not confirmed or reverted' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      })
+      return json({ error: 'Transaction not confirmed or reverted' }, 400)
     }
 
-    // 3. Parse Transfer events and verify the USDC transfer targets the merchant wallet
+    // ── 5. A USDC Transfer to the merchant wallet for >= the owed amount ──
     const iface = new ethers.Interface(USDC_ABI)
+    const expectedAmount = BigInt(Math.round(cashAmount * 1e6)) // USDC 6 decimals
     let verified = false
-    const expectedAmount = BigInt(Math.round(offer.amount * 1e6)) // USDC 6 decimals
-
     for (const log of receipt.logs) {
       if (log.address.toLowerCase() !== USDC_ADDRESS.toLowerCase()) continue
       try {
@@ -81,38 +113,27 @@ serve(async (req) => {
           break
         }
       } catch {
-        // Not a matching event — skip
+        // Not a matching Transfer event — skip
       }
     }
 
     if (!verified) {
-      return new Response(JSON.stringify({ error: 'No valid USDC transfer to merchant wallet found in transaction' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      })
+      return json({ error: 'No valid USDC transfer to the merchant wallet was found in this transaction.' }, 400)
     }
 
-    // 4. Mark the purchase offer as paid
+    // ── 6. Record the verified payment (service role; the DB trigger blocks
+    //       this column for end users, so this is the only sanctioned path). ──
     const { error: updateErr } = await supabase
-      .from('purchase_offers')
-      .update({ status: 'paid', payment_txn_hash: tx_hash })
-      .eq('id', purchase_offer_id)
+      .from('trade_offers')
+      .update({ payment_status: 'verified', payment_txn_hash: tx_hash })
+      .eq('id', trade_id)
 
     if (updateErr) {
-      return new Response(JSON.stringify({ error: 'Failed to update offer: ' + updateErr.message }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      })
+      return json({ error: 'Failed to record payment: ' + updateErr.message }, 500)
     }
 
-    return new Response(
-      JSON.stringify({ success: true, status: 'paid' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    )
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500,
-    })
+    return json({ success: true, status: 'verified' })
+  } catch (error) {
+    return json({ error: (error as Error).message }, 500)
   }
 })

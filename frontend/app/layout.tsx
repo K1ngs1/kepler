@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { Inter, Libre_Baskerville } from 'next/font/google';
 import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import { Web3Provider } from '@/components/Web3Provider';
+// Validate required env at server startup — throws (fail fast) if misconfigured.
+import '@/lib/env';
 import './globals.css';
 
 const inter = Inter({

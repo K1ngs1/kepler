@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import ListingCard from '@/components/ListingCard';
+import LoginModal from '@/components/LoginModal';
+import ErrorState from '@/components/ErrorState';
 import { createClient } from '@/lib/supabase/client';
-import Link from 'next/link';
+import { handleError, friendlyMessage } from '@/lib/error-handler';
+import { useRouter } from 'next/navigation';
 
 const PAGE_SIZE = 24;
 
@@ -38,43 +41,62 @@ function SkeletonGrid() {
 }
 
 export default function ListingsPage() {
+  const router = useRouter();
   const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   useEffect(() => {
-    const fetchListings = async () => {
-      setLoading(true);
-      const supabase = createClient();
-      if (!supabase) { setLoading(false); return; }
+    const supabase = createClient();
+    if (!supabase) return;
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setUserId(data.user.id);
+    });
+  }, []);
 
-      const from = page * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
-
-      const { data, count, error } = await supabase
-        .from('listings')
-        .select(`
-          id, title, price_min, price_max, cover_photo_url,
-          seller:profiles!listings_seller_id_fkey(username, reputation_score),
-          items:listing_items(id)
-        `, { count: 'exact' })
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .range(from, to);
-
-      if (!error && data) {
-        setListings(data.map((d: any) => ({
-          ...d,
-          item_count: d.items ? d.items.length : 0,
-        })));
-        if (count != null) setTotal(count);
-      }
+  const fetchListings = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const supabase = createClient();
+    if (!supabase) {
+      setError('The app is not configured correctly. Please try again later.');
       setLoading(false);
-    };
+      return;
+    }
 
-    fetchListings();
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    const { data, count, error: queryError } = await supabase
+      .from('listings')
+      .select(`
+        id, title, price_min, price_max, cover_photo_url,
+        seller:profiles!listings_seller_id_fkey(username, reputation_score),
+        items:listing_items(id)
+      `, { count: 'exact' })
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (queryError) {
+      setError(friendlyMessage(handleError(queryError, { where: 'listings.fetch', page })));
+    } else if (data) {
+      setListings(data.map((d: any) => ({
+        ...d,
+        item_count: d.items ? d.items.length : 0,
+      })));
+      if (count != null) setTotal(count);
+    }
+    setLoading(false);
   }, [page]);
+
+  useEffect(() => {
+    fetchListings();
+  }, [fetchListings]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const showPagination = !loading && total > PAGE_SIZE;
@@ -82,16 +104,21 @@ export default function ListingsPage() {
   return (
     <>
       <Nav />
-      <div className="section" style={{ minHeight: '60vh' }}>
+      <div className="section" style={{ minHeight: '60vh', paddingTop: 32 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h1 className="section-hd-title" style={{ fontSize: 24, margin: 0 }}>Marketplace Listings</h1>
-          <Link href="/listings/new" className="nav-sell" style={{ textDecoration: 'none', display: 'inline-block', borderRadius: 10, padding: '8px 18px', fontSize: 13 }}>
+          <button className="nav-sell" style={{ padding: '9px 22px', fontSize: 15 }} onClick={() => {
+            if (!userId) { setShowLoginModal(true); return; }
+            router.push('/listings/new');
+          }}>
             Create Listing
-          </Link>
+          </button>
         </div>
 
         {loading ? (
           <SkeletonGrid />
+        ) : error ? (
+          <ErrorState message={error} onRetry={fetchListings} />
         ) : listings.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 0' }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#333', marginBottom: 8 }}>No active listings</div>
@@ -132,6 +159,15 @@ export default function ListingsPage() {
         )}
       </div>
       <Footer />
+      {showLoginModal && (
+        <LoginModal
+          onClose={() => setShowLoginModal(false)}
+          onSuccess={() => {
+            setShowLoginModal(false);
+            router.push('/listings/new');
+          }}
+        />
+      )}
     </>
   );
 }

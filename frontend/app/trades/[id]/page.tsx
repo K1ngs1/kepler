@@ -4,7 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import DepositSection from '@/components/DepositSection';
+import ErrorState from '@/components/ErrorState';
 import { createClient } from '@/lib/supabase/client';
+import { handleError, friendlyMessage } from '@/lib/error-handler';
 import { useParams, useRouter } from 'next/navigation';
 
 interface TradeMessage {
@@ -64,6 +66,21 @@ interface Trade {
   updated_at: string;
   initiator: { username: string | null; reputation_score: number | null } | null;
   recipient: { username: string | null; reputation_score: number | null } | null;
+}
+
+// offered_cards is a jsonb column. Legacy rows were double-encoded (stored as a
+// JSON string), so normalize both shapes to an array before rendering.
+function normalizeCards(value: OfferedCard[] | string | null | undefined): OfferedCard[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
 }
 
 const TIMELINE_STEPS = ['proposed', 'accepted', 'completed'];
@@ -161,6 +178,8 @@ export default function TradeDetailPage() {
   const [msgInput, setMsgInput] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [rated, setRated] = useState(false);
@@ -169,6 +188,7 @@ export default function TradeDetailPage() {
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [disputeReason, setDisputeReason] = useState('');
   const [counterOpen, setCounterOpen] = useState(false);
+  const [confirmShipmentOpen, setConfirmShipmentOpen] = useState(false);
   const [counterCards, setCounterCards] = useState<{ card_name: string; set_name: string; condition: string }[]>([]);
   const [counterCash, setCounterCash] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -185,16 +205,23 @@ export default function TradeDetailPage() {
     let tradeSub: ReturnType<typeof supabase.channel> | null = null;
     let msgSub: ReturnType<typeof supabase.channel> | null = null;
 
+    setLoadError(null);
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { setLoading(false); return; }
       setUserId(user.id);
 
       const loadTrade = async () => {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('trade_offers')
           .select('*, initiator:profiles!trade_offers_initiator_id_fkey(username, reputation_score), recipient:profiles!trade_offers_recipient_id_fkey(username, reputation_score)')
           .eq('id', id)
           .single();
+        if (error) {
+          if (error.code !== 'PGRST116') {
+            setLoadError(friendlyMessage(handleError(error, { where: 'trade.load', id })));
+          }
+          return;
+        }
         if (data) {
           setTrade(data as unknown as Trade);
 
@@ -223,27 +250,29 @@ export default function TradeDetailPage() {
             const json = await resp.json();
             setShippingAddresses(json.addresses || []);
           }
-        } catch { /* ignore */ }
+        } catch (e) { handleError(e, { where: 'trade.loadShipping', id }); }
         setShippingLoading(false);
       };
 
       const loadMessages = async () => {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('trade_messages')
           .select('id, sender_id, content, sent_at, profiles(username)')
           .eq('trade_id', id)
           .order('sent_at', { ascending: true });
+        if (error) { handleError(error, { where: 'trade.loadMessages', id }); return; }
         if (data) setMessages(data as unknown as TradeMessage[]);
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       };
 
       const checkRated = async () => {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('trade_ratings')
           .select('id')
           .eq('trade_id', id)
           .eq('rater_id', user.id)
           .maybeSingle();
+        if (error) { handleError(error, { where: 'trade.checkRated', id }); return; }
         if (data) setRated(true);
       };
 
@@ -259,8 +288,8 @@ export default function TradeDetailPage() {
         .subscribe();
     });
 
-    return () => { tradeSub?.unsubscribe(); msgSub?.unsubscribe(); };
-  }, [id]);
+    return () => { if (tradeSub) supabase.removeChannel(tradeSub); if (msgSub) supabase.removeChannel(msgSub); };
+  }, [id, reloadKey]);
 
   const sendMessage = async () => {
     if (!msgInput.trim() || !userId) return;
@@ -305,7 +334,7 @@ export default function TradeDetailPage() {
       return;
     }
     await rpc('counter_trade', {
-      p_offered_cards: JSON.stringify(validCards),
+      p_offered_cards: validCards,
       p_cash_amount: cash,
     });
     setCounterOpen(false);
@@ -333,6 +362,14 @@ export default function TradeDetailPage() {
     </>
   );
 
+  if (loadError) return (
+    <>
+      <Nav />
+      <ErrorState message={loadError} onRetry={() => { setLoading(true); setReloadKey(k => k + 1); }} />
+      <Footer />
+    </>
+  );
+
   if (!trade) return (
     <>
       <Nav />
@@ -346,7 +383,7 @@ export default function TradeDetailPage() {
   const partnerName = isInitiator ? (trade.recipient?.username ?? 'Unknown') : (trade.initiator?.username ?? 'Unknown');
   const partnerRep = isInitiator ? trade.recipient?.reputation_score : trade.initiator?.reputation_score;
   const myConfirmed = isInitiator ? trade.initiator_confirmed : trade.recipient_confirmed;
-  const offeredCards: OfferedCard[] = trade.offered_cards || [];
+  const offeredCards: OfferedCard[] = normalizeCards(trade.offered_cards);
 
   return (
     <>
@@ -453,14 +490,13 @@ export default function TradeDetailPage() {
             {trade.status !== 'completed' && trade.status !== 'cancelled' && trade.status !== 'disputed' && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
                 {isRecipient && ['proposed', 'countered'].includes(trade.status) && (
-                  <button className="btn-place-bid" style={{ flex: 1, fontSize: 13 }} disabled={actionLoading} onClick={() => rpc('accept_trade')}>
+                  <button style={{ flex: 1, fontSize: 15, fontWeight: 700, fontFamily: 'inherit', padding: '14px 20px', border: 'none', borderRadius: 4, cursor: 'pointer', background: '#1e8a4a', color: '#fff' }} disabled={actionLoading} onClick={() => rpc('accept_trade')}>
                     Accept
                   </button>
                 )}
                 {isRecipient && ['proposed', 'countered'].includes(trade.status) && (
                   <button
-                    className="btn-watchlist"
-                    style={{ flex: 1, fontSize: 13, borderColor: '#6b21a8', color: '#6b21a8' }}
+                    style={{ flex: 1, fontSize: 15, fontWeight: 700, fontFamily: 'inherit', padding: '14px 20px', border: 'none', borderRadius: 4, cursor: 'pointer', background: '#1d6fa8', color: '#fff' }}
                     disabled={actionLoading}
                     onClick={() => { setCounterCards([{ card_name: '', set_name: '', condition: '' }]); setCounterOpen(true); }}
                   >
@@ -468,24 +504,23 @@ export default function TradeDetailPage() {
                   </button>
                 )}
                 {isRecipient && ['proposed', 'countered'].includes(trade.status) && (
-                  <button className="btn-watchlist" style={{ flex: 1, fontSize: 13, borderColor: '#c0392b', color: '#c0392b' }} disabled={actionLoading} onClick={() => rpc('cancel_trade')}>
+                  <button style={{ flex: 1, fontSize: 15, fontWeight: 700, fontFamily: 'inherit', padding: '14px 20px', border: 'none', borderRadius: 4, cursor: 'pointer', background: '#c03535', color: '#fff' }} disabled={actionLoading} onClick={() => rpc('cancel_trade')}>
                     Reject
                   </button>
                 )}
                 {(isInitiator || isRecipient) && trade.status === 'accepted' && (
-                  <button className="btn-watchlist" style={{ flex: 1, fontSize: 13 }} disabled={actionLoading} onClick={() => rpc('cancel_trade')}>
+                  <button style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', padding: '14px 20px', background: '#fff', color: '#111', border: '1.5px solid #111', borderRadius: 4, cursor: 'pointer', margin: 0 }} disabled={actionLoading} onClick={() => rpc('cancel_trade')}>
                     Cancel
                   </button>
                 )}
                 {trade.status === 'accepted' && !myConfirmed && (
-                  <button className="btn-place-bid" style={{ flex: 1, fontSize: 13 }} disabled={actionLoading} onClick={() => rpc('complete_trade')}>
-                    Confirm Receipt
+                  <button style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', padding: '14px 20px', background: '#111', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', margin: 0 }} disabled={actionLoading} onClick={() => setConfirmShipmentOpen(true)}>
+                    Confirm Shipment
                   </button>
                 )}
                 {trade.status === 'accepted' && (isInitiator || isRecipient) && (
                   <button
-                    className="btn-watchlist"
-                    style={{ flex: 1, fontSize: 13, color: '#c0392b', borderColor: '#c0392b' }}
+                    style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', padding: '14px 20px', background: '#fff', color: '#c0392b', border: '1.5px solid #c0392b', borderRadius: 4, cursor: 'pointer', margin: 0 }}
                     disabled={actionLoading}
                     onClick={() => setDisputeOpen(true)}
                   >
@@ -529,15 +564,13 @@ export default function TradeDetailPage() {
                   />
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <button
-                      className="btn-watchlist"
-                      style={{ width: 'auto', padding: '8px 16px', fontSize: 13, marginTop: 0 }}
+                      style={{ minWidth: 130, padding: '10px 20px', fontSize: 14, fontWeight: 600, fontFamily: 'inherit', borderRadius: 4, border: '1.5px solid #111', background: '#fff', color: '#111', cursor: 'pointer' }}
                       onClick={() => { setDisputeOpen(false); setDisputeReason(''); }}
                     >
                       Cancel
                     </button>
                     <button
-                      className="btn-place-bid"
-                      style={{ width: 'auto', padding: '8px 16px', fontSize: 13, marginTop: 0, background: '#c0392b' }}
+                      style={{ minWidth: 130, padding: '10px 20px', fontSize: 14, fontWeight: 600, fontFamily: 'inherit', borderRadius: 4, border: 'none', background: '#c0392b', color: '#fff', cursor: 'pointer' }}
                       disabled={!disputeReason.trim() || actionLoading}
                       onClick={async () => {
                         await rpc('open_dispute', { p_reason: disputeReason.trim() });
@@ -546,6 +579,33 @@ export default function TradeDetailPage() {
                       }}
                     >
                       Submit Dispute
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Confirm Shipment modal */}
+            {confirmShipmentOpen && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 400, maxWidth: '90vw' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: '#111' }}>Confirm Shipment</div>
+                  <div style={{ fontSize: 13, color: '#444', marginBottom: 20, lineHeight: 1.5 }}>
+                    By confirming, you are verifying that the cards have been physically delivered to your address and you are satisfied with the shipment.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', padding: '10px 16px', background: '#fff', color: '#111', border: '1.5px solid #111', borderRadius: 4, cursor: 'pointer', margin: 0 }}
+                      onClick={() => setConfirmShipmentOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', padding: '10px 16px', background: '#111', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', margin: 0 }}
+                      disabled={actionLoading}
+                      onClick={async () => { setConfirmShipmentOpen(false); await rpc('complete_trade'); }}
+                    >
+                      Yes, Confirm
                     </button>
                   </div>
                 </div>
@@ -619,17 +679,15 @@ export default function TradeDetailPage() {
                     />
                   </div>
 
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <div style={{ display: 'flex', gap: 8 }}>
                     <button
-                      className="btn-watchlist"
-                      style={{ width: 'auto', padding: '8px 16px', fontSize: 13, marginTop: 0 }}
+                      style={{ flex: 1, padding: '10px 16px', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', background: '#fff', color: '#111', border: '1.5px solid #111', borderRadius: 4, margin: 0 }}
                       onClick={() => { setCounterOpen(false); setCounterCards([]); setCounterCash(''); }}
                     >
                       Cancel
                     </button>
                     <button
-                      className="btn-place-bid"
-                      style={{ width: 'auto', padding: '8px 16px', fontSize: 13, marginTop: 0, background: '#6b21a8' }}
+                      style={{ flex: 1, padding: '10px 16px', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer', background: '#6b21a8', color: '#fff', border: 'none', borderRadius: 4, margin: 0 }}
                       disabled={actionLoading}
                       onClick={handleCounter}
                     >

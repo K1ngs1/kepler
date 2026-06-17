@@ -6,7 +6,7 @@ export async function GET(
   { params }: { params: { tradeId: string } }
 ) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceKey) {
     return NextResponse.json({ error: 'Server not configured.' }, { status: 500 });

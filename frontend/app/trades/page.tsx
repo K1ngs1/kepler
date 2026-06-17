@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
+import ErrorState from '@/components/ErrorState';
 import { createClient } from '@/lib/supabase/client';
+import { handleError, friendlyMessage } from '@/lib/error-handler';
 
 interface Offer {
   id: string;
@@ -64,6 +66,7 @@ export default function OffersPage() {
   const [tab, setTab] = useState<'active' | 'history'>('active');
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [authed, setAuthed] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -71,13 +74,18 @@ export default function OffersPage() {
     const supabase = createClient();
     if (!supabase) return;
 
-    const { data } = await supabase
+    const { data, error: queryError } = await supabase
       .from('trade_offers')
       .select('id, status, offer_type, created_at, updated_at, initiator_id, recipient_id, cash_amount, listing_id, initiator:profiles!trade_offers_initiator_id_fkey(username), recipient:profiles!trade_offers_recipient_id_fkey(username), listing:listings!trade_offers_listing_id_fkey(title)')
       .or(`initiator_id.eq.${uid},recipient_id.eq.${uid}`)
       .order('updated_at', { ascending: false });
 
-    if (data) setOffers(data as unknown as Offer[]);
+    if (queryError) {
+      setError(friendlyMessage(handleError(queryError, { where: 'offers.load' })));
+    } else if (data) {
+      setError(null);
+      setOffers(data as unknown as Offer[]);
+    }
   }, []);
 
   useEffect(() => {
@@ -99,7 +107,7 @@ export default function OffersPage() {
         .subscribe();
     });
 
-    return () => { sub?.unsubscribe(); };
+    return () => { if (sub) supabase.removeChannel(sub); };
   }, [loadOffers]);
 
 
@@ -147,6 +155,8 @@ export default function OffersPage() {
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#aaa', fontSize: 13 }}>Loading offers…</div>
         ) : !authed ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#888', fontSize: 14 }}>Sign in to see your offers.</div>
+        ) : error ? (
+          <ErrorState message={error} onRetry={() => { if (userId) loadOffers(userId); }} />
         ) : (
           (() => {
             const items = tab === 'active' ? activeOffers : historyOffers;

@@ -6,8 +6,9 @@ export function createClient() {
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
-    console.error('[Supabase] Server client: missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
-    return null as never;
+    // Fail loudly: callers run on the server where a missing config is a
+    // deploy error, not a recoverable runtime state.
+    throw new Error('[Supabase] Server client: missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
   }
 
   const cookieStore = cookies();

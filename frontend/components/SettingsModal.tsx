@@ -79,6 +79,7 @@ export default function SettingsModal({ onClose }: Props) {
 
     setSaving(false);
     if (error) {
+      console.error('Failed to save settings:', error);
       setToast('Failed to save settings.');
     } else {
       setToast('Settings saved!');
@@ -102,13 +103,13 @@ export default function SettingsModal({ onClose }: Props) {
         .from('shipping_addresses')
         .update({ ...addrForm, updated_at: new Date().toISOString() })
         .eq('id', editingAddress.id);
-      if (error) { setToast('Failed to update address.'); setAddrSaving(false); return; }
+      if (error) { console.error('Failed to update address:', error); setToast('Failed to update address.'); setAddrSaving(false); return; }
     } else {
       const isDefault = addresses.length === 0;
       const { error } = await supabase
         .from('shipping_addresses')
         .insert({ ...addrForm, user_id: user.id, is_default: isDefault });
-      if (error) { setToast('Failed to save address.'); setAddrSaving(false); return; }
+      if (error) { console.error('Failed to save address:', error); setToast('Failed to save address.'); setAddrSaving(false); return; }
     }
 
     // Reload addresses
@@ -291,8 +292,7 @@ export default function SettingsModal({ onClose }: Props) {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                    <button className="modal-cancel" style={{ flex: 1 }} onClick={() => { setShowAddressForm(false); setEditingAddress(null); }}>Cancel</button>
-                    <button className="modal-confirm" style={{ flex: 2 }} onClick={handleSaveAddress} disabled={addrSaving}>
+                    <button className="modal-confirm" style={{ flex: 1 }} onClick={handleSaveAddress} disabled={addrSaving}>
                       {addrSaving ? 'Saving...' : editingAddress ? 'Update' : 'Save Address'}
                     </button>
                   </div>

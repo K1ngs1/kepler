@@ -33,6 +33,15 @@ export const USDC_ADDRESS = isProd
     ? USDC_ADDRESS_AMOY
     : USDC_ADDRESS_ARC;
 
+// Block-explorer base for tx links, matching the active chain above. Replaces
+// the previous `NEXT_PUBLIC_CHAIN === 'mainnet'` checks that always fell back to
+// the Arc explorer even on Amoy.
+export const BLOCK_EXPLORER_TX = isProd
+  ? 'https://polygonscan.com/tx/'
+  : isAmoy
+    ? 'https://amoy.polygonscan.com/tx/'
+    : 'https://testnet.arcscan.app/tx/';
+
 const amoyRpc = process.env.POLYGON_RPC_URL || 'https://rpc-amoy.polygon.technology';
 
 // Chain selection: mainnet → Polygon, amoy → Polygon Amoy, default → Arc Testnet

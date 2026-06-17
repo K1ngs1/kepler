@@ -121,4 +121,3 @@ NEXT_PUBLIC_MERCHANT_WALLET=0x...
 - Tests run against a live dev server at `localhost:3000`
 - CI runs on every push to `main` and on PRs
 - 2 retries in CI; headless Chromium only
-

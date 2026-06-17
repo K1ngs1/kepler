@@ -8,7 +8,10 @@ import BuyNowModal from '@/components/BuyNowModal';
 import PaymentModal from '@/components/PaymentModal';
 import DepositSection from '@/components/DepositSection';
 import ListingMessages from '@/components/ListingMessages';
+import LoginModal from '@/components/LoginModal';
+import ErrorState from '@/components/ErrorState';
 import { createClient } from '@/lib/supabase/client';
+import { handleError, friendlyMessage } from '@/lib/error-handler';
 import { useParams, useRouter } from 'next/navigation';
 import { useAccount } from 'wagmi';
 
@@ -59,6 +62,21 @@ interface ShippingAddr {
   state: string;
   zip: string;
   country: string;
+}
+
+// offered_cards is a jsonb column. Legacy rows were double-encoded (stored as a
+// JSON string), so normalize both shapes to an array before rendering.
+function normalizeCards(value: OfferedCard[] | string | null | undefined): OfferedCard[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
 }
 
 interface Listing {
@@ -124,6 +142,8 @@ export default function ListingDetailPage() {
   const router = useRouter();
   const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
   const [buyModalOpen, setBuyModalOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -136,6 +156,8 @@ export default function ListingDetailPage() {
   const [shippingLoading, setShippingLoading] = useState(false);
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [disputeReason, setDisputeReason] = useState('');
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'buy' | 'trade' | null>(null);
   const { isConnected, address } = useAccount();
 
   const showError = (msg: string) => {
@@ -147,15 +169,24 @@ export default function ListingDetailPage() {
     const supabase = createClient();
     if (!supabase || !id) return;
 
-    const { data } = await supabase
+    const { data, error: queryError } = await supabase
       .from('trade_offers')
       .select('id, initiator_id, recipient_id, offer_type, status, cash_amount, offered_cards, deposit_amount, initiator_deposit_locked, recipient_deposit_locked, initiator_confirmed, recipient_confirmed, payment_status, payment_txn_hash, first_confirmed_at, disputed_by, dispute_reason, disputed_at, tracking_number, created_at, initiator:profiles!trade_offers_initiator_id_fkey(username)')
       .eq('listing_id', id)
       .or(`initiator_id.eq.${uid},recipient_id.eq.${uid}`)
       .order('created_at', { ascending: false });
 
+    if (queryError) {
+      // Surface (and log) instead of silently leaving the deal section blank —
+      // a swallowed error here is exactly how a bad column once hid the deal.
+      setErrorMsg(friendlyMessage(handleError(queryError, { where: 'listing.loadOffers', id })));
+      return;
+    }
     if (data) {
-      const typed = data as unknown as Offer[];
+      const typed = (data as unknown as Offer[]).map(o => ({
+        ...o,
+        offered_cards: normalizeCards(o.offered_cards),
+      }));
       setOffers(typed);
       // Find the active deal (accepted/disputed) for this user
       const deal = typed.find(o =>
@@ -180,7 +211,8 @@ export default function ListingDetailPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    if (!supabase || !id) return;
+    if (!supabase || !id) { setLoadError('The app is not configured correctly.'); setLoading(false); return; }
+    setLoadError(null);
 
     let offerSub: ReturnType<typeof supabase.channel> | null = null;
 
@@ -206,7 +238,16 @@ export default function ListingDetailPage() {
         .eq('id', id)
         .single();
 
-      if (error || !listingData) {
+      if (error) {
+        // PGRST116 = no rows from .single() → genuine "not found". Anything
+        // else is a real failure the user should see (not a blank page).
+        if (error.code !== 'PGRST116') {
+          setLoadError(friendlyMessage(handleError(error, { where: 'listing.fetch', id })));
+        }
+        setLoading(false);
+        return;
+      }
+      if (!listingData) {
         setLoading(false);
         return;
       }
@@ -238,8 +279,8 @@ export default function ListingDetailPage() {
 
     fetchListing();
 
-    return () => { offerSub?.unsubscribe(); };
-  }, [id, loadOffers]);
+    return () => { if (offerSub) supabase.removeChannel(offerSub); };
+  }, [id, loadOffers, reloadKey]);
 
   // Load shipping when active deal exists
   useEffect(() => {
@@ -305,6 +346,7 @@ export default function ListingDetailPage() {
     new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
   if (loading) return <><Nav /><div style={{ textAlign: 'center', padding: '80px 0', color: '#aaa', fontSize: 13 }}>Loading…</div><Footer /></>;
+  if (loadError) return <><Nav /><ErrorState message={loadError} onRetry={() => { setLoading(true); setReloadKey(k => k + 1); }} /><Footer /></>;
   if (!listing) return <><Nav /><div style={{ textAlign: 'center', padding: '80px 0', color: '#888' }}>Listing not found.</div><Footer /></>;
 
   const isSeller = userId === listing.seller_id;
@@ -314,6 +356,10 @@ export default function ListingDetailPage() {
   // For active deal
   const isInitiator = activeDeal?.initiator_id === userId;
   const myConfirmed = activeDeal ? (isInitiator ? activeDeal.initiator_confirmed : activeDeal.recipient_confirmed) : false;
+  // A purchase, or a trade with a cash sweetener, must be funded into escrow
+  // by the initiator before the deal can proceed.
+  const needsEscrow = !!activeDeal && (activeDeal.offer_type === 'purchase' || (activeDeal.cash_amount ?? 0) > 0);
+  const escrowFunded = ['paid', 'verified'].includes(activeDeal?.payment_status ?? '');
   const partnerName = activeDeal
     ? (isInitiator ? (listing.seller?.username ?? 'Seller') : (activeDeal.initiator?.username ?? 'Buyer'))
     : '';
@@ -322,8 +368,15 @@ export default function ListingDetailPage() {
     <>
       <Nav />
       {errorMsg && (
-        <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: '#c0392b', color: '#fff', padding: '11px 22px', borderRadius: 6, fontSize: 13.5, fontWeight: 500, zIndex: 1000, boxShadow: '0 4px 24px rgba(0,0,0,0.22)', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
-          {errorMsg}
+        <div role="alert" style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 14, background: '#c0392b', color: '#fff', padding: '11px 16px 11px 22px', borderRadius: 6, fontSize: 13.5, fontWeight: 500, zIndex: 1000, boxShadow: '0 4px 24px rgba(0,0,0,0.22)', maxWidth: 'min(90vw, 520px)' }}>
+          <span>{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg(null)}
+            aria-label="Dismiss"
+            style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, lineHeight: 1, cursor: 'pointer', padding: 0, opacity: 0.85 }}
+          >
+            ×
+          </button>
         </div>
       )}
       <div className="detail-breadcrumb">
@@ -366,15 +419,17 @@ export default function ListingDetailPage() {
               </button>
             ) : (
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn-buy-now" onClick={() => setBuyModalOpen(true)}>
-                  Make Offer
+                <button className="btn-buy-now" onClick={() => {
+                  if (!userId) { setPendingAction('buy'); setShowLoginModal(true); return; }
+                  setBuyModalOpen(true);
+                }}>
+                  Buy
                 </button>
-                <button
-                  className="btn-outline-ext"
-                  onClick={() => router.push(`/trades/new?fromListing=${listing.id}`)}
-                  style={{ marginTop: 0 }}
-                >
-                  Propose Trade
+                <button className="btn-trade-now" onClick={() => {
+                  if (!userId) { setPendingAction('trade'); setShowLoginModal(true); return; }
+                  router.push(`/trades/new?fromListing=${listing.id}`);
+                }}>
+                  Trade
                 </button>
               </div>
             )}
@@ -421,8 +476,8 @@ export default function ListingDetailPage() {
                 </div>
               )}
 
-              {/* Purchase: Pay Now button */}
-              {activeDeal.offer_type === 'purchase' && activeDeal.status === 'accepted' && isInitiator && !activeDeal.payment_status && (
+              {/* Escrow: fund the cash owed before the deal can proceed */}
+              {needsEscrow && activeDeal.status === 'accepted' && isInitiator && !escrowFunded && (
                 <button
                   className="btn-place-bid"
                   style={{ fontSize: 13, marginBottom: 12 }}
@@ -431,7 +486,12 @@ export default function ListingDetailPage() {
                   Pay Now — ${(activeDeal.cash_amount ?? 0).toFixed(2)}
                 </button>
               )}
-              {activeDeal.payment_status === 'paid' && (
+              {needsEscrow && activeDeal.status === 'accepted' && !isInitiator && !escrowFunded && (
+                <div style={{ fontSize: 12.5, color: '#555', marginBottom: 12 }}>
+                  Waiting for the buyer to fund escrow before the deal can proceed.
+                </div>
+              )}
+              {['paid', 'verified'].includes(activeDeal.payment_status ?? '') && (
                 <div style={{ fontSize: 12, color: '#1a8c49', fontWeight: 600, marginBottom: 12 }}>
                   Payment sent
                 </div>
@@ -440,7 +500,7 @@ export default function ListingDetailPage() {
               {/* Action buttons */}
               {activeDeal.status === 'accepted' && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                  {!myConfirmed && (
+                  {!myConfirmed && !(needsEscrow && !escrowFunded) && (
                     <button
                       className="btn-place-bid"
                       style={{ flex: 1, fontSize: 13 }}
@@ -769,6 +829,24 @@ export default function ListingDetailPage() {
         open={chatOpen}
         onClose={() => setChatOpen(false)}
       />
+      {showLoginModal && (
+        <LoginModal
+          onClose={() => { setShowLoginModal(false); setPendingAction(null); }}
+          onSuccess={() => {
+            setShowLoginModal(false);
+            const sb = createClient();
+            if (!sb) { setPendingAction(null); return; }
+            sb.auth.getUser().then(({ data }: { data: { user: { id: string } | null } }) => {
+              if (data.user) {
+                setUserId(data.user.id);
+                if (pendingAction === 'buy') setBuyModalOpen(true);
+                if (pendingAction === 'trade') router.push(`/trades/new?fromListing=${listing.id}`);
+              }
+              setPendingAction(null);
+            });
+          }}
+        />
+      )}
     </>
   );
 }

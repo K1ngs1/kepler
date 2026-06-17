@@ -5,8 +5,9 @@ import { parseAbi, formatUnits } from 'viem';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { createClient } from '@/lib/supabase/client';
-import { USDC_DECIMALS } from '@/lib/web3/usdc';
-import { USDC_ADDRESS } from '@/lib/web3/config';
+import { handleError, friendlyMessage } from '@/lib/error-handler';
+import { USDC_DECIMALS, usdcToUnits } from '@/lib/web3/usdc';
+import { USDC_ADDRESS, BLOCK_EXPLORER_TX } from '@/lib/web3/config';
 
 const abi = parseAbi([
   'function transfer(address to, uint256 amount) returns (bool)',
@@ -72,7 +73,9 @@ export default function DepositSection({ tradeId, depositAmount, initiatorLocked
         ? { initiator_deposit_locked: true, initiator_deposit_txn: txHash }
         : { recipient_deposit_locked: true, recipient_deposit_txn: txHash };
       supabase.from('trade_offers').update(updates).eq('id', tradeId)
-        .then(({ error: e }) => { if (e) console.error('Deposit update error:', e); });
+        .then(({ error: e }) => {
+          if (e) setError(friendlyMessage(handleError(e, { where: 'deposit.update', tradeId })));
+        });
     }
   }
 
@@ -123,7 +126,7 @@ export default function DepositSection({ tradeId, depositAmount, initiatorLocked
     setError('');
     setTxStage('wallet');
 
-    const amountInUnits = BigInt(Math.round(depositAmount * 10 ** USDC_DECIMALS));
+    const amountInUnits = usdcToUnits(depositAmount);
     writeContract({
       address: USDC_ADDRESS as `0x${string}`,
       abi,
@@ -136,9 +139,7 @@ export default function DepositSection({ tradeId, depositAmount, initiatorLocked
   const theirLocked = isInitiator ? recipientLocked : initiatorLocked;
   const isProcessing = derivedStage === 'wallet' || derivedStage === 'submitted' || derivedStage === 'confirming';
 
-  const explorerBase = process.env.NEXT_PUBLIC_CHAIN === 'mainnet'
-    ? 'https://polygonscan.com/tx/'
-    : 'https://testnet.arcscan.app/tx/';
+  const explorerBase = BLOCK_EXPLORER_TX;
 
   return (
     <div style={{ marginTop: 24, padding: 16, border: '1px solid #ebebeb', borderRadius: 8, background: '#fafafa' }}>

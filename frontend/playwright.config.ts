@@ -23,12 +23,13 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: process.env.CI
-    ? undefined
-    : {
-        command: 'npm run dev',
-        url: process.env.BASE_URL || 'http://localhost:3000',
-        reuseExistingServer: true,
-        timeout: 120_000,
-      },
+  // In CI, serve the production build (precompiled — avoids the dev-server
+  // cold-compile that times out page.goto on first hit). Locally, use the dev
+  // server and reuse one that's already running.
+  webServer: {
+    command: process.env.CI ? 'npm run start' : 'npm run dev',
+    url: process.env.BASE_URL || 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
 });

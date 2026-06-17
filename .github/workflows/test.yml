@@ -32,6 +32,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
+
       - name: Build
         run: npm run build
 
@@ -41,6 +47,7 @@ jobs:
       - name: Run E2E tests
         run: npm run test:e2e
         env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           TEST_USER1_EMAIL: ${{ secrets.TEST_USER1_EMAIL }}
           TEST_USER1_PASSWORD: ${{ secrets.TEST_USER1_PASSWORD }}
           TEST_USER2_EMAIL: ${{ secrets.TEST_USER2_EMAIL }}

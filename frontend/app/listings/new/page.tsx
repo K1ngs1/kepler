@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import { createClient } from '@/lib/supabase/client';
+import { handleError } from '@/lib/error-handler';
 import { useRouter } from 'next/navigation';
 
 interface CardEntry {
@@ -92,6 +93,7 @@ export default function NewListingPage() {
       if (listingError) throw listingError;
 
       let coverPhotoUrl = null;
+      let uploadFailures = 0;
       for (let i = 0; i < listingPhotos.length; i++) {
         const file = listingPhotos[i];
         const path = `listings/${listing.id}/${Date.now()}-${i}`;
@@ -99,21 +101,35 @@ export default function NewListingPage() {
           .from('card-photos')
           .upload(path, file, { contentType: file.type });
 
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('card-photos').getPublicUrl(path);
-          const url = urlData.publicUrl;
-          if (i === 0) coverPhotoUrl = url;
-
-          await supabase.from('listing_photos').insert({
-            listing_id: listing.id,
-            url,
-            sort_order: i
-          });
+        if (uploadError) {
+          // Don't fail the whole listing for one bad photo, but don't drop it
+          // silently either — log it and tell the user afterwards.
+          uploadFailures++;
+          handleError(uploadError, { where: 'listing.photoUpload', listingId: listing.id, index: i });
+          continue;
         }
+
+        const { data: urlData } = supabase.storage.from('card-photos').getPublicUrl(path);
+        const url = urlData.publicUrl;
+        if (i === 0) coverPhotoUrl = url;
+
+        await supabase.from('listing_photos').insert({
+          listing_id: listing.id,
+          url,
+          sort_order: i
+        });
       }
 
       if (coverPhotoUrl) {
         await supabase.from('listings').update({ cover_photo_url: coverPhotoUrl }).eq('id', listing.id);
+      }
+
+      if (listingPhotos.length > 0 && uploadFailures === listingPhotos.length) {
+        // Every photo failed — surface it rather than navigating to a photoless
+        // listing as if nothing went wrong. The listing itself was created.
+        setError('Your listing was created, but its photos could not be uploaded. You can add them by editing the listing.');
+        setLoading(false);
+        return;
       }
 
       // Insert listing_items with free-text fields

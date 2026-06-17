@@ -1,0 +1,21 @@
+# Supabase project configuration (used by the Supabase CLI for
+# `supabase db push`, `supabase functions deploy`, and local dev).
+project_id = "yquwasetajootlgmyxan"
+
+# ── Edge Functions ──────────────────────────────────────────────────────────
+# verify_jwt gates whether Supabase requires a valid JWT before the function
+# runs. See supabase/functions/* for the in-function authorization on top.
+
+# Payment verification is called from the browser by the paying user; it needs
+# a valid JWT so the function can authorize caller == offer initiator.
+[functions.polygon-verify]
+verify_jwt = true
+
+# Fund release is invoked only by a Database Webhook (server-to-server) and is
+# authorized by the shared RELEASE_WEBHOOK_SECRET header, not a user JWT.
+[functions.polygon-release]
+verify_jwt = false
+
+# Email notifications are invoked by Database Webhooks (server-to-server).
+[functions.send-trade-email]
+verify_jwt = false
