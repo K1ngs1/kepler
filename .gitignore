@@ -45,3 +45,6 @@ test-results/
 
 # Replit
 .config/
+
+# Supabase CLI local link state
+supabase/.temp/

@@ -57,6 +57,8 @@ interface Trade {
   initiator_deposit_locked?: boolean;
   recipient_deposit_locked?: boolean;
   tracking_number?: string | null;
+  carrier?: string | null;
+  shipped_at?: string | null;
   disputed_by?: string | null;
   dispute_reason?: string | null;
   disputed_at?: string | null;
@@ -189,6 +191,9 @@ export default function TradeDetailPage() {
   const [disputeReason, setDisputeReason] = useState('');
   const [counterOpen, setCounterOpen] = useState(false);
   const [confirmShipmentOpen, setConfirmShipmentOpen] = useState(false);
+  const [shipOpen, setShipOpen] = useState(false);
+  const [trackingInput, setTrackingInput] = useState('');
+  const [carrierInput, setCarrierInput] = useState('');
   const [counterCards, setCounterCards] = useState<{ card_name: string; set_name: string; condition: string }[]>([]);
   const [counterCash, setCounterCash] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -306,6 +311,7 @@ export default function TradeDetailPage() {
     complete_trade: 'Receipt confirmed!',
     open_dispute: 'Dispute opened.',
     counter_trade: 'Counter-offer sent!',
+    mark_shipped: 'Shipment recorded!',
   };
 
   const rpc = async (fn: string, extraParams?: Record<string, unknown>) => {
@@ -513,9 +519,14 @@ export default function TradeDetailPage() {
                     Cancel
                   </button>
                 )}
+                {trade.status === 'accepted' && !trade.shipped_at && (
+                  <button style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', padding: '14px 20px', background: '#fff', color: '#111', border: '1.5px solid #111', borderRadius: 4, cursor: 'pointer', margin: 0 }} disabled={actionLoading} onClick={() => { setTrackingInput(''); setCarrierInput(''); setShipOpen(true); }}>
+                    Mark as Shipped
+                  </button>
+                )}
                 {trade.status === 'accepted' && !myConfirmed && (
                   <button style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', padding: '14px 20px', background: '#111', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', margin: 0 }} disabled={actionLoading} onClick={() => setConfirmShipmentOpen(true)}>
-                    Confirm Shipment
+                    Confirm Receipt
                   </button>
                 )}
                 {trade.status === 'accepted' && (isInitiator || isRecipient) && (
@@ -585,11 +596,11 @@ export default function TradeDetailPage() {
               </div>
             )}
 
-            {/* Confirm Shipment modal */}
+            {/* Confirm Receipt modal */}
             {confirmShipmentOpen && (
               <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 400, maxWidth: '90vw' }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: '#111' }}>Confirm Shipment</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: '#111' }}>Confirm Receipt</div>
                   <div style={{ fontSize: 13, color: '#444', marginBottom: 20, lineHeight: 1.5 }}>
                     By confirming, you are verifying that the cards have been physically delivered to your address and you are satisfied with the shipment.
                   </div>
@@ -606,6 +617,50 @@ export default function TradeDetailPage() {
                       onClick={async () => { setConfirmShipmentOpen(false); await rpc('complete_trade'); }}
                     >
                       Yes, Confirm
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mark as Shipped modal */}
+            {shipOpen && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ background: '#fff', borderRadius: 8, padding: 24, width: 400, maxWidth: '90vw' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10, color: '#111' }}>Mark as Shipped</div>
+                  <div style={{ fontSize: 12.5, color: '#555', marginBottom: 14, lineHeight: 1.5 }}>
+                    Enter the carrier tracking number. This is your proof of shipment — if your partner disputes delivery, the carrier&apos;s delivery scan determines the outcome.
+                  </div>
+                  <input
+                    className="login-field-input"
+                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, marginBottom: 8 }}
+                    placeholder="Tracking number *"
+                    value={trackingInput}
+                    onChange={(e) => setTrackingInput(e.target.value)}
+                  />
+                  <input
+                    className="login-field-input"
+                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}
+                    placeholder="Carrier (e.g., USPS, UPS, FedEx) — optional"
+                    value={carrierInput}
+                    onChange={(e) => setCarrierInput(e.target.value)}
+                  />
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                    <button
+                      style={{ minWidth: 120, padding: '10px 20px', fontSize: 14, fontWeight: 600, fontFamily: 'inherit', borderRadius: 4, border: '1.5px solid #111', background: '#fff', color: '#111', cursor: 'pointer' }}
+                      onClick={() => setShipOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      style={{ minWidth: 120, padding: '10px 20px', fontSize: 14, fontWeight: 600, fontFamily: 'inherit', borderRadius: 4, border: 'none', background: '#111', color: '#fff', cursor: 'pointer' }}
+                      disabled={!trackingInput.trim() || actionLoading}
+                      onClick={async () => {
+                        await rpc('mark_shipped', { p_tracking_number: trackingInput.trim(), p_carrier: carrierInput.trim() || null });
+                        setShipOpen(false);
+                      }}
+                    >
+                      Save
                     </button>
                   </div>
                 </div>
@@ -759,6 +814,10 @@ export default function TradeDetailPage() {
                 {trade.tracking_number && (
                   <div style={{ marginTop: 8, fontSize: 12, color: '#555' }}>
                     Tracking: <span style={{ fontFamily: 'monospace', color: '#333', fontWeight: 600 }}>{trade.tracking_number}</span>
+                    {trade.carrier && <span style={{ color: '#777' }}> · {trade.carrier}</span>}
+                    {trade.shipped_at && (
+                      <span style={{ color: '#999' }}> · shipped {new Date(trade.shipped_at).toLocaleDateString()}</span>
+                    )}
                   </div>
                 )}
               </div>
