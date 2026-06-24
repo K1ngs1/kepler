@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import DepositSection from '@/components/DepositSection';
+import PaymentModal from '@/components/PaymentModal';
 import ErrorState from '@/components/ErrorState';
 import { createClient } from '@/lib/supabase/client';
 import { handleError, friendlyMessage } from '@/lib/error-handler';
@@ -50,6 +51,8 @@ interface Trade {
   initiator_confirmed: boolean;
   recipient_confirmed: boolean;
   cash_amount?: number | null;
+  offer_type?: string | null;
+  payment_status?: string | null;
   listing_id?: string | null;
   offered_cards?: OfferedCard[] | null;
   requested_listing_item_ids?: string[] | null;
@@ -192,6 +195,7 @@ export default function TradeDetailPage() {
   const [counterOpen, setCounterOpen] = useState(false);
   const [confirmShipmentOpen, setConfirmShipmentOpen] = useState(false);
   const [shipOpen, setShipOpen] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
   const [trackingInput, setTrackingInput] = useState('');
   const [carrierInput, setCarrierInput] = useState('');
   const [counterCards, setCounterCards] = useState<{ card_name: string; set_name: string; condition: string }[]>([]);
@@ -390,6 +394,12 @@ export default function TradeDetailPage() {
   const partnerRep = isInitiator ? trade.recipient?.reputation_score : trade.initiator?.reputation_score;
   const myConfirmed = isInitiator ? trade.initiator_confirmed : trade.recipient_confirmed;
   const offeredCards: OfferedCard[] = normalizeCards(trade.offered_cards);
+  // Money-carrying deals must be escrowed before they can proceed: the buyer
+  // (initiator) funds, then shipping/confirmation unlocks. Mirrors the gate the
+  // server enforces in complete_trade (migration 018).
+  const needsEscrow = trade.offer_type === 'purchase' || (trade.cash_amount ?? 0) > 0;
+  const escrowFunded = ['paid', 'verified'].includes(trade.payment_status ?? '');
+  const escrowBlocking = needsEscrow && !escrowFunded;
 
   return (
     <>
@@ -492,6 +502,27 @@ export default function TradeDetailPage() {
               </div>
             )}
 
+            {/* Escrow: the buyer funds the cash owed before the deal proceeds */}
+            {needsEscrow && trade.status === 'accepted' && !escrowFunded && isInitiator && (
+              <button
+                style={{ fontSize: 15, fontWeight: 700, fontFamily: 'inherit', padding: '14px 20px', border: 'none', borderRadius: 4, cursor: 'pointer', background: '#1e8a4a', color: '#fff', marginTop: 16, width: '100%' }}
+                disabled={actionLoading}
+                onClick={() => setPayOpen(true)}
+              >
+                Pay Now — ${(trade.cash_amount ?? 0).toFixed(2)}
+              </button>
+            )}
+            {needsEscrow && trade.status === 'accepted' && !escrowFunded && !isInitiator && (
+              <div style={{ fontSize: 12.5, color: '#555', marginTop: 16 }}>
+                Waiting for the buyer to fund escrow before the deal can proceed.
+              </div>
+            )}
+            {needsEscrow && escrowFunded && ['accepted', 'completed'].includes(trade.status) && (
+              <div style={{ fontSize: 12, color: '#1a8c49', fontWeight: 600, marginTop: 16 }}>
+                ✓ Payment held in escrow
+              </div>
+            )}
+
             {/* Action buttons */}
             {trade.status !== 'completed' && trade.status !== 'cancelled' && trade.status !== 'disputed' && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
@@ -519,12 +550,12 @@ export default function TradeDetailPage() {
                     Cancel
                   </button>
                 )}
-                {trade.status === 'accepted' && !trade.shipped_at && (
+                {trade.status === 'accepted' && !trade.shipped_at && !escrowBlocking && (
                   <button style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', padding: '14px 20px', background: '#fff', color: '#111', border: '1.5px solid #111', borderRadius: 4, cursor: 'pointer', margin: 0 }} disabled={actionLoading} onClick={() => { setTrackingInput(''); setCarrierInput(''); setShipOpen(true); }}>
                     Mark as Shipped
                   </button>
                 )}
-                {trade.status === 'accepted' && !myConfirmed && (
+                {trade.status === 'accepted' && !myConfirmed && !escrowBlocking && (
                   <button style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', padding: '14px 20px', background: '#111', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', margin: 0 }} disabled={actionLoading} onClick={() => setConfirmShipmentOpen(true)}>
                     Confirm Receipt
                   </button>
@@ -772,6 +803,20 @@ export default function TradeDetailPage() {
               </div>
             )}
 
+            {/* Resolved-dispute outcome */}
+            {trade.dispute_resolution && (
+              <div style={{ marginTop: 16, padding: 16, border: '1px solid #cfe8d6', borderRadius: 8, background: '#f6fbf7' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#1a8c49', marginBottom: 6 }}>Dispute Resolved</div>
+                <div style={{ fontSize: 12.5, color: '#444' }}>
+                  {trade.dispute_resolution === 'refund_both'
+                    ? 'Both parties were refunded — each got their own funds back.'
+                    : trade.dispute_resolution === 'release_to_initiator'
+                    ? (isInitiator ? 'Resolved in your favor — escrowed funds were released to you.' : 'Funds were released to the buyer.')
+                    : (isRecipient ? 'Resolved in your favor — escrowed funds were released to you.' : 'Funds were released to the seller.')}
+                </div>
+              </div>
+            )}
+
             {/* Security Deposit Section */}
             {(['accepted', 'completed', 'disputed'].includes(trade.status)) && (
               <DepositSection
@@ -881,6 +926,15 @@ export default function TradeDetailPage() {
           </div>
         </div>
       </div>
+
+      {payOpen && (
+        <PaymentModal
+          offerId={trade.id}
+          amount={trade.cash_amount ?? 0}
+          onClose={() => { setPayOpen(false); setReloadKey((k) => k + 1); }}
+        />
+      )}
+
       <Footer />
     </>
   );

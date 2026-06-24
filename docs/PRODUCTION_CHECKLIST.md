@@ -10,7 +10,7 @@ End-to-end steps to take Kepler live on **Vercel** (frontend) + **Supabase**
 
 ## 1. Supabase — database
 
-1. Apply **all** migrations `001` → `020` in order via the SQL editor (or
+1. Apply **all** migrations `001` → `022` in order via the SQL editor (or
    `supabase db push`). If the DB already existed, at minimum confirm the
    reconcile + integrity migrations are applied:
    - `019_reconcile_schema_drift.sql` — adds `user_cards.photo_url`, drops the
@@ -63,6 +63,11 @@ automatically — do **not** set them.
 | New trade offer email | `trade_offers` INSERT | `send-trade-email` | `Authorization: Bearer <service key>` |
 | New message email | `trade_messages` INSERT | `send-trade-email` | `Authorization: Bearer <service key>` |
 | Release funds | `trade_offers` UPDATE (status → `completed`) | `polygon-release` | `x-release-secret: <RELEASE_WEBHOOK_SECRET>` |
+
+> This single webhook also settles **resolved disputes**: `resolve_dispute`
+> drives the trade to `completed` with a `dispute_resolution`, which
+> `polygon-release` reads to decide the payout (refund both / release to buyer /
+> release to seller). No separate dispute webhook is needed.
 
 > The `x-release-secret` header is **mandatory** — `polygon-release` rejects any
 > call without it (401). Use the exact value set in step 3.
