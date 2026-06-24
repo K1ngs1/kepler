@@ -47,6 +47,7 @@ Set function secrets:
 supabase secrets set MERCHANT_WALLET=0x...            # receives buyer USDC
 supabase secrets set MERCHANT_PRIVATE_KEY=0x...       # hot wallet that pays sellers
 supabase secrets set POLYGON_RPC_URL=https://...       # production RPC (not the public default)
+supabase secrets set USDC_ADDRESS=0x...                # USDC contract for the active chain; omit on Polygon mainnet (the default), set it for Amoy/testnets
 supabase secrets set RELEASE_WEBHOOK_SECRET=$(openssl rand -hex 32)
 supabase secrets set RESEND_API_KEY=re_...             # send-trade-email
 # Optional hardening: ALLOWED_ORIGIN=https://<your-domain>
@@ -105,6 +106,14 @@ payments app onto Arc testnet.
 
 For production on Polygon, set `NEXT_PUBLIC_CHAIN=polygon`. Confirm `USDC_ADDRESS`
 and the block-explorer link (`BLOCK_EXPLORER_TX`) resolve to the intended network.
+
+**The frontend chain and the edge-function chain must match.** The edge functions
+(`polygon-verify`, `polygon-release`) read `POLYGON_RPC_URL` and `USDC_ADDRESS`
+from secrets — these must point at the **same network** as `NEXT_PUBLIC_CHAIN`,
+or a real payment will never verify. Amoy example: `NEXT_PUBLIC_CHAIN=amoy`,
+`POLYGON_RPC_URL=https://rpc-amoy.polygon.technology`,
+`USDC_ADDRESS=0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582`. On Polygon mainnet,
+leave `USDC_ADDRESS` unset (defaults to `0x3c49…`) and use a mainnet RPC.
 
 ## 8. Post-deploy verification
 

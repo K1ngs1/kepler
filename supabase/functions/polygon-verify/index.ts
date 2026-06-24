@@ -18,8 +18,9 @@ const json = (body: unknown, status = 200) =>
 // USDC ERC-20 Transfer event signature
 const USDC_ABI = ["event Transfer(address indexed from, address indexed to, uint256 value)"]
 
-// Polygon native USDC
-const USDC_ADDRESS = '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'
+// USDC contract for the active chain. Defaults to Polygon PoS native USDC;
+// override via the USDC_ADDRESS secret for testnets (e.g. Amoy).
+const USDC_ADDRESS = Deno.env.get('USDC_ADDRESS') || '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
