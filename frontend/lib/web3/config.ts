@@ -23,10 +23,10 @@ export const arcTestnet = defineChain({
   testnet: true,
 });
 
-const isProd = process.env.NEXT_PUBLIC_CHAIN === 'mainnet';
+const isProd = process.env.NEXT_PUBLIC_CHAIN === 'polygon';
 const isAmoy = process.env.NEXT_PUBLIC_CHAIN === 'amoy';
 
-// USDC address: mainnet → Polygon USDC, amoy → Amoy USDC, default testnet → Arc USDC
+// USDC address: polygon → Polygon USDC, amoy → Amoy USDC, default testnet → Arc USDC
 export const USDC_ADDRESS = isProd
   ? USDC_ADDRESS_MAINNET
   : isAmoy
@@ -35,7 +35,7 @@ export const USDC_ADDRESS = isProd
 
 // Block-explorer base for tx links, matching the active chain above. Replaces
 // the previous `NEXT_PUBLIC_CHAIN === 'mainnet'` checks that always fell back to
-// the Arc explorer even on Amoy.
+// the Arc explorer even on Amoy. ('polygon' is the production selector.)
 export const BLOCK_EXPLORER_TX = isProd
   ? 'https://polygonscan.com/tx/'
   : isAmoy
@@ -44,7 +44,7 @@ export const BLOCK_EXPLORER_TX = isProd
 
 const amoyRpc = process.env.POLYGON_RPC_URL || 'https://rpc-amoy.polygon.technology';
 
-// Chain selection: mainnet → Polygon, amoy → Polygon Amoy, default → Arc Testnet
+// Chain selection: polygon → Polygon, amoy → Polygon Amoy, default → Arc Testnet
 const chains = isProd
   ? [polygon] as const
   : isAmoy

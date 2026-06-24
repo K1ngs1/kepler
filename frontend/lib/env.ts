@@ -13,10 +13,15 @@ import { z } from 'zod';
 const publicSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().url('must be a valid URL'),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(20, 'is missing or too short'),
-  // Chain-selection semantics live in lib/web3/config.ts ('mainnet' → Polygon,
-  // 'amoy' → Polygon Amoy, anything else → Arc testnet). Kept permissive so a
-  // valid testnet identifier is never rejected at boot.
-  NEXT_PUBLIC_CHAIN: z.string().optional(),
+  // Chain-selection semantics live in lib/web3/config.ts ('polygon' → Polygon,
+  // 'amoy' → Polygon Amoy, 'testnet'/unset → Arc testnet). Enum-validated so a
+  // typo (e.g. 'mainnet', 'poligon') fails the build instead of silently
+  // routing a payments app onto the Arc testnet.
+  NEXT_PUBLIC_CHAIN: z
+    .enum(['polygon', 'amoy', 'testnet'], {
+      message: "must be one of 'polygon', 'amoy', 'testnet'",
+    })
+    .optional(),
   NEXT_PUBLIC_MERCHANT_WALLET: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/, 'must be a 0x-prefixed 40-hex-char address')

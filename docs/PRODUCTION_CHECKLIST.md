@@ -92,16 +92,19 @@ automatically — do **not** set them.
    if a required one is missing or malformed — so a misconfigured deploy won't
    silently ship.
 
-## 7. Chain configuration (decision required)
+## 7. Chain configuration
 
-There is a naming inconsistency to resolve before mainnet:
-- `lib/web3/config.ts` selects chain by `NEXT_PUBLIC_CHAIN`: `mainnet` → Polygon,
-  `amoy` → Polygon Amoy, **anything else → Arc testnet**.
-- CLAUDE.md documents the value set as `amoy|polygon`.
+`NEXT_PUBLIC_CHAIN` selects the network in `lib/web3/config.ts`:
+- `polygon` → Polygon mainnet
+- `amoy` → Polygon Amoy testnet
+- `testnet` (or unset) → Arc testnet
 
-For production on Polygon, set `NEXT_PUBLIC_CHAIN=mainnet` (current code), or
-standardize the code+docs on `polygon` first. Confirm `USDC_ADDRESS` and the
-block-explorer link (`BLOCK_EXPLORER_TX`) resolve to the intended network.
+The value is enum-validated in `lib/env.ts`, so an unrecognized value (e.g. a
+typo, or the old `mainnet`) **fails the build** rather than silently routing a
+payments app onto Arc testnet.
+
+For production on Polygon, set `NEXT_PUBLIC_CHAIN=polygon`. Confirm `USDC_ADDRESS`
+and the block-explorer link (`BLOCK_EXPLORER_TX`) resolve to the intended network.
 
 ## 8. Post-deploy verification
 
