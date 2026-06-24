@@ -10,7 +10,7 @@ End-to-end steps to take Kepler live on **Vercel** (frontend) + **Supabase**
 
 ## 1. Supabase — database
 
-1. Apply **all** migrations `001` → `022` in order via the SQL editor (or
+1. Apply **all** migrations `001` → `023` in order via the SQL editor (or
    `supabase db push`). If the DB already existed, at minimum confirm the
    reconcile + integrity migrations are applied:
    - `019_reconcile_schema_drift.sql` — adds `user_cards.photo_url`, drops the
@@ -22,6 +22,12 @@ End-to-end steps to take Kepler live on **Vercel** (frontend) + **Supabase**
    yquwasetajootlgmyxan`, then use `supabase db push` for all future changes.
 3. Verify Row-Level Security is enabled on every user-facing table (it is, in
    migrations 001/005/007/012). The `tests/rls.spec.ts` suite asserts isolation.
+4. **Grant the first admin.** Disputes are resolved at `/admin/disputes`, gated
+   by `profiles.is_admin` (migration 023). After applying migrations, flag your
+   own account in the SQL editor:
+   `update public.profiles set is_admin = true where id = '<your-uuid>';`
+   Without this, `resolve_dispute` rejects every caller and no dispute can be
+   settled.
 
 ## 2. Supabase — storage
 
