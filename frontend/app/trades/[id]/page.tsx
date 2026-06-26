@@ -400,6 +400,11 @@ export default function TradeDetailPage() {
   const needsEscrow = trade.offer_type === 'purchase' || (trade.cash_amount ?? 0) > 0;
   const escrowFunded = ['paid', 'verified'].includes(trade.payment_status ?? '');
   const escrowBlocking = needsEscrow && !escrowFunded;
+  // In a purchase only the seller (recipient) ships to the buyer; in a
+  // card-for-card trade both parties ship. So "do I ship?" is everyone in a
+  // trade, but seller-only in a purchase — the buyer just receives.
+  const isPurchase = trade.offer_type === 'purchase';
+  const iShip = !isPurchase || isRecipient;
 
   return (
     <>
@@ -550,7 +555,7 @@ export default function TradeDetailPage() {
                     Cancel
                   </button>
                 )}
-                {trade.status === 'accepted' && !trade.shipped_at && !escrowBlocking && (
+                {trade.status === 'accepted' && !trade.shipped_at && !escrowBlocking && iShip && (
                   <button style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', padding: '14px 20px', background: '#fff', color: '#111', border: '1.5px solid #111', borderRadius: 4, cursor: 'pointer', margin: 0 }} disabled={actionLoading} onClick={() => { setTrackingInput(''); setCarrierInput(''); setShipOpen(true); }}>
                     Mark as Shipped
                   </button>
@@ -835,25 +840,33 @@ export default function TradeDetailPage() {
                 <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: '#111' }}>
                   Shipping Info
                 </div>
-                <div style={{ fontSize: 12, color: '#555', marginBottom: 12 }}>
-                  {`Ship items to your trade partner's address below.`}
-                </div>
-                {shippingLoading ? (
-                  <div style={{ fontSize: 12, color: '#aaa' }}>Loading address…</div>
-                ) : shippingAddresses.length > 0 ? (
-                  shippingAddresses.map((addr) => (
-                    <div key={addr.id} style={{ padding: '10px 12px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fff', marginBottom: 6 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{addr.name}</div>
-                      <div style={{ fontSize: 12, color: '#555', marginTop: 2, lineHeight: 1.5 }}>
-                        {addr.street}<br />
-                        {addr.city}, {addr.state} {addr.zip}<br />
-                        {addr.country}
-                      </div>
+                {iShip ? (
+                  <>
+                    <div style={{ fontSize: 12, color: '#555', marginBottom: 12 }}>
+                      {`Ship the item to your trade partner's address below.`}
                     </div>
-                  ))
+                    {shippingLoading ? (
+                      <div style={{ fontSize: 12, color: '#aaa' }}>Loading address…</div>
+                    ) : shippingAddresses.length > 0 ? (
+                      shippingAddresses.map((addr) => (
+                        <div key={addr.id} style={{ padding: '10px 12px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fff', marginBottom: 6 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{addr.name}</div>
+                          <div style={{ fontSize: 12, color: '#555', marginTop: 2, lineHeight: 1.5 }}>
+                            {addr.street}<br />
+                            {addr.city}, {addr.state} {addr.zip}<br />
+                            {addr.country}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ fontSize: 12, color: '#999' }}>
+                        No shipping address on file. Ask your trade partner to add one in Settings.
+                      </div>
+                    )}
+                  </>
                 ) : (
-                  <div style={{ fontSize: 12, color: '#999' }}>
-                    No shipping address on file. Ask your trade partner to add one in Settings.
+                  <div style={{ fontSize: 12, color: '#555', marginBottom: 12 }}>
+                    The seller will ship to your address. Make sure your shipping address is set in Settings.
                   </div>
                 )}
                 {trade.tracking_number && (

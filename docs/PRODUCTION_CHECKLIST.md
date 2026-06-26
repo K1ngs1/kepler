@@ -84,6 +84,7 @@ automatically — do **not** set them.
   seller payouts.
 - Monitor its balance; releases fail (and the trade stays claimed for manual
   reconciliation) if it can't cover a payout.
+  
 
 ## 6. Vercel — frontend
 
